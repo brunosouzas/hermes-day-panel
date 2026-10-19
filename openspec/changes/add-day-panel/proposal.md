@@ -51,9 +51,10 @@ None (new repository).
 
 ## Open questions
 
-1. What does "AI usage" mean on the page? Proposed: the provider limit windows that `hermes usage` reports (session and week, used percent, reset time) for the providers the user lists. Token and cost history (`hermes insights`) would be a later change. The `ai_usage` kind waits for the owner's answer at gate 1.
+None open. Answered by the owner at gate 1 (2026-10-19):
 
-Decision taken from the card, for the owner to confirm: merge is opt-in per section, needs a preview and a confirmation, and is guarded by the head commit. The card asks for "merge only with confirmation".
+1. "AI usage" means the provider limit windows that `hermes usage` reports (session and week, used percent, reset time) for the providers the user lists. Token and cost history (`hermes insights`) stays out of scope.
+2. Merge is opt-in per section, needs a preview and a confirmation, and is guarded by the head commit.
 
 ## Implicit requirements
 
