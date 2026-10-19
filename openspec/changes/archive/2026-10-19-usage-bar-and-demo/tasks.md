@@ -17,7 +17,7 @@ Test levels: **unit (pytest)** runs the Python readers with fakes or a real subp
 ## 4. Demo and docs
 
 - [x] 4.1 `examples/demo/sources.yaml` and `examples/demo/demo_source.py` (standard library only, no network): cards, pull-request-like items with badges, pipelines with tones, a routine, and usage windows with progress. Unit (pytest), `tests/test_demo.py`: the file validates, and every section reads `ok` offline through the real readers.
-- [ ] 4.2 README: item fields table (`time_label`, `tone`, `progress`), `ai_usage` `labels`, "The page" (tone, bar, time label), and a "Try it" section with the demo, plus a screenshot of the demo in Desktop (`docs/today.png`). Check: `tests/test_readme.py` passes.
+- [x] 4.2 README: item fields table (`time_label`, `tone`, `progress`), `ai_usage` `labels`, "The page" (tone, bar, time label), and a "Try it" section with the demo, plus a screenshot of the demo in Desktop (`docs/today.png`). Check: `tests/test_readme.py` passes.
 
 ## 5. Checks
 
