@@ -88,17 +88,36 @@ const STATUS_LABEL = { ok: 'ok', stale: 'stale', error: 'error' }
 
 export function ItemRow ({ section, item, onOpen, onMerge }) {
   const link = safeLink(item.url)
+  const meta = [
+    item.detail ? jsx('span', { 'data-role': 'detail', children: text(item.detail) }, 'd') : null,
+    item.time ? jsx('span', { 'data-role': 'time', children: formatTime(item.time) }, 't') : null
+  ].filter(Boolean)
+  const merge = canMerge(section, item)
+  // Two lines per item: the title (with its badge), then the details and actions, so a long
+  // title never pushes one item's details next to the following item.
   return jsxs('li', {
     className: `${ID}-item`,
     children: [
-      link
-        ? jsx(Button, { variant: 'link', 'data-action': 'open', onClick: () => onOpen?.(link), children: text(item.title) })
-        : jsx('span', { 'data-role': 'title', children: text(item.title) }),
-      item.badge ? jsx(Badge, { 'data-role': 'badge', children: text(item.badge) }) : null,
-      item.detail ? jsx('span', { className: `${ID}-muted`, 'data-role': 'detail', children: text(item.detail) }) : null,
-      item.time ? jsx('span', { className: `${ID}-muted`, 'data-role': 'time', children: formatTime(item.time) }) : null,
-      canMerge(section, item)
-        ? jsx(Button, { size: 'sm', variant: 'ghost', 'data-action': 'merge', onClick: () => onMerge?.(section, item), children: 'Merge…' })
+      jsxs('div', {
+        className: `${ID}-item-line`,
+        children: [
+          link
+            ? jsx('a', {
+              href: link, 'data-action': 'open', className: `${ID}-link`,
+              onClick: e => { e?.preventDefault?.(); onOpen?.(link) }, children: text(item.title)
+            })
+            : jsx('span', { 'data-role': 'title', children: text(item.title) }),
+          item.badge ? jsx(Badge, { 'data-role': 'badge', children: text(item.badge) }) : null
+        ]
+      }),
+      meta.length || merge
+        ? jsxs('div', {
+          className: `${ID}-item-line ${ID}-muted`,
+          children: [
+            ...meta,
+            merge ? jsx(Button, { size: 'sm', variant: 'ghost', 'data-action': 'merge', onClick: () => onMerge?.(section, item), children: 'Merge…' }) : null
+          ]
+        })
         : null
     ]
   })
@@ -258,8 +277,11 @@ const STYLE = `
 .${ID}-toolbar,.${ID}-actions,.${ID}-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .${ID}-section{border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px}
 .${ID}-head h3{margin:0;font-size:14px;font-weight:600}
-.${ID}-items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
-.${ID}-item{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.${ID}-items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.${ID}-item{display:flex;flex-direction:column;gap:2px;min-width:0}
+.${ID}-item-line{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:0}
+.${ID}-link{color:var(--accent);text-decoration:none;overflow-wrap:anywhere;cursor:pointer}
+.${ID}-link:hover{text-decoration:underline}
 .${ID}-muted{color:var(--muted-foreground);font-size:12px}
 .${ID}-error{color:var(--destructive,#c33);font-size:12px}
 .${ID}-dialog{position:fixed;right:24px;bottom:24px;max-width:480px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:6px;z-index:50}
