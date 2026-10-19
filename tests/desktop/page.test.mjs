@@ -72,6 +72,46 @@ test('status shown as a dot, with a word only when it is not ok', () => {
   assert.equal(byRole(stale, 'status-dot')[0].props.tone, 'warn')
 })
 
+const usageSection = items => prs({ id: 'ai', title: 'AI usage', items, total: items.length })
+
+test('Usage window', () => {
+  const now = Date.parse('2026-10-19T15:20:00Z')
+  const item = { title: 'Claude · Current session', progress: 68, tone: 'warn', time_label: 'resets', time: '2026-10-19T16:00:00Z' }
+  const tree = render(SectionCard({ section: usageSection([item]), now }))
+  const [bar] = byRole(tree, 'progress')
+  assert.equal(bar.props['data-tone'], 'warn')
+  assert.equal(bar.props['aria-valuenow'], 68)
+  assert.equal(bar.props.children.props.style.width, '68%')
+  assert.equal(textOf(byRole(tree, 'time')), 'resets in 40 min')
+})
+
+test('Badge coloured by tone', () => {
+  const tree = render(SectionCard({ section: usageSection([{ title: 'build 1', badge: 'failed', tone: 'bad' }, { title: 'build 2', badge: 'ok' }]) }))
+  const badges = byRole(tree, 'badge')
+  assert.deepEqual(badges.map(b => [textOf([b]), b.props.variant]), [['failed', 'destructive'], ['ok', 'muted']])
+  assert.equal(byRole(tree, 'tone-dot').length, 0) // a badge carries the tone; no dot as well
+})
+
+test('Tone without a badge', () => {
+  const tree = render(SectionCard({ section: usageSection([{ title: 'deploy', tone: 'good' }]) }))
+  const [dot] = byRole(tree, 'tone-dot')
+  assert.equal(dot.props['data-tone'], 'good')
+  const main = all(tree, n => n.props?.className === 'day-panel-item-main')[0]
+  assert.equal(main.props.children.filter(Boolean)[0], dot) // before the title
+})
+
+test('Empty bar and no tone', () => {
+  const tree = render(SectionCard({ section: usageSection([{ title: 'quota', progress: 0 }]) }))
+  const [bar] = byRole(tree, 'progress')
+  assert.equal(bar.props['data-tone'], 'none') // the primary colour
+  assert.equal(bar.props.children.props.style.width, '0%')
+  assert.equal(byRole(tree, 'tone-dot').length, 0)
+  assert.equal(byRole(tree, 'time').length, 0)
+  // a value the backend would have dropped never draws a bar here either
+  const odd = render(SectionCard({ section: usageSection([{ title: 'q', progress: '50' }, { title: 'r', progress: 140 }]) }))
+  assert.equal(byRole(odd, 'progress').length, 0)
+})
+
 test('Markup in source text', () => {
   const evil = '<img src=x onerror=alert(1)>'
   const tree = render(SectionCard({ section: prs({ items: [{ title: evil, detail: evil }] }) }))

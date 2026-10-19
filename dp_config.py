@@ -25,7 +25,7 @@ SECTION_KEYS = ("id", "kind", "title", "enabled", "refresh_minutes", "max_items"
 LIMITS = {"refresh_minutes": (15, 1, 1440), "max_items": (10, 1, 50), "timeout_s": (30, 1, 120)}
 MERGE_METHODS = ("squash", "merge", "rebase")
 PR_INCLUDE = ("author", "review_requested")
-MCP_FIELDS = ("title", "detail", "badge", "time", "url")
+MCP_FIELDS = ("title", "detail", "badge", "time", "time_label", "url", "tone", "progress")
 DEFAULT_RELATIVE = Path("day-panel") / "sources.yaml"
 
 
@@ -221,9 +221,18 @@ def _mcp_options(c: _Check, where: str, opts: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _usage_options(c: _Check, where: str, opts: Dict[str, Any]) -> Dict[str, Any]:
-    out: Dict[str, Any] = {"providers": [], "warn_percent": 80}
-    if not c.only(where, "option", opts, ("providers", "warn_percent")):
+    out: Dict[str, Any] = {"providers": [], "warn_percent": 80, "labels": {}}
+    if not c.only(where, "option", opts, ("providers", "warn_percent", "labels")):
         return out
+    if "labels" in opts:
+        labels = c.mapping(where, "labels", opts["labels"])
+        if labels is not None:
+            good = all(isinstance(k, str) and k and isinstance(v, str) and 1 <= len(v.strip()) <= 40
+                       for k, v in labels.items())
+            if good:
+                out["labels"] = {k: v.strip() for k, v in labels.items()}
+            else:
+                c.fail(where, "labels must map provider names to text of 1 to 40 characters")
     if "providers" in opts:
         providers = c.text_list(where, "providers", opts["providers"], 0, 10)
         if providers is not None:
@@ -240,7 +249,7 @@ KIND_OPTIONS: Dict[str, Callable[[_Check, str, Dict[str, Any]], Dict[str, Any]]]
 }
 KIND_OPTION_NAMES = {
     "command": ("argv",), "github_prs": ("include", "exclude_owners", "merge"),
-    "mcp_tool": ("server", "tool", "args", "fields", "list_key"), "ai_usage": ("providers", "warn_percent"),
+    "mcp_tool": ("server", "tool", "args", "fields", "list_key"), "ai_usage": ("providers", "warn_percent", "labels"),
 }
 
 

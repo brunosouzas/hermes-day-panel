@@ -179,11 +179,11 @@ def find_tool(name: str) -> Optional[str]:
 
 # ---------------------------------------------------------------- result normalisation
 
-def clip(value: Any) -> Optional[str]:
+def clip(value: Any, limit: int = TEXT_MAX) -> Optional[str]:
     if not isinstance(value, str):
         return None
     value = " ".join(value.split())
-    return value[:TEXT_MAX] if value else None
+    return value[:limit] if value else None
 
 
 def safe_url(value: Any) -> Optional[str]:
@@ -194,6 +194,10 @@ def safe_url(value: Any) -> Optional[str]:
     if (lower.startswith("https://") or lower.startswith("http://")) and len(value) > 8 and " " not in value:
         return value[:2000]
     return None
+
+
+TONES = ("good", "warn", "bad", "muted")
+TIME_LABEL_MAX = 40
 
 
 def normalise_item(raw: Any) -> Optional[Dict[str, Any]]:
@@ -211,6 +215,14 @@ def normalise_item(raw: Any) -> Optional[Dict[str, Any]]:
         value = clip(raw.get(name))
         if value:
             item[name] = value
+    time_label = clip(raw.get("time_label"), TIME_LABEL_MAX)
+    if time_label:
+        item["time_label"] = time_label
+    if raw.get("tone") in TONES:
+        item["tone"] = raw["tone"]
+    progress = raw.get("progress")
+    if isinstance(progress, (int, float)) and not isinstance(progress, bool) and 0 <= progress <= 100:
+        item["progress"] = progress
     return item
 
 
@@ -364,7 +376,11 @@ def map_mcp_result(text: str, options: Dict[str, Any], max_items: int) -> Dict[s
         item = {}
         for name, source_key in fields.items():
             value = element.get(source_key)
-            if value is not None:
+            if value is None:
+                continue
+            if name == "progress":  # a number or nothing; the item rules then check its range
+                item[name] = value
+            else:
                 item[name] = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
         if not clip(item.get("title")):
             skipped += 1
@@ -382,8 +398,11 @@ def read_mcp_tool(section: Section, call: Callable[..., str] = call_mcp_child) -
 
 # ---------------------------------------------------------------- AI usage windows
 
-def _usage_items(data: Dict[str, Any], name: str, warn: int) -> List[Dict[str, Any]]:
-    label = data.get("provider") if isinstance(data.get("provider"), str) else name
+def _usage_items(data: Dict[str, Any], name: Optional[str], warn: int,
+                 labels: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+    reported = data.get("provider")
+    provider = (reported.strip() if isinstance(reported, str) and reported.strip() else None) or name or "provider"
+    label = (labels or {}).get(provider) or provider
     plan = data.get("plan") if isinstance(data.get("plan"), str) else ""
     items = []
     for window in data.get("windows") or []:
@@ -392,11 +411,13 @@ def _usage_items(data: Dict[str, Any], name: str, warn: int) -> List[Dict[str, A
         used = window.get("used_percent")
         if isinstance(used, bool) or not isinstance(used, (int, float)):
             continue
-        item = {"title": f"{label or 'provider'} · {window.get('label') or 'window'}",
+        item = {"title": f"{label} · {window.get('label') or 'window'}",
                 "detail": f"{used:.0f}% used" + (f" · {plan}" if plan else ""),
-                "time": window.get("resets_at") if isinstance(window.get("resets_at"), str) else None}
+                "time": window.get("resets_at") if isinstance(window.get("resets_at"), str) else None,
+                "time_label": "resets", "progress": used}
         if used >= warn:
             item["badge"] = "high"
+            item["tone"] = "warn"
         items.append(item)
     return items
 
@@ -444,7 +465,7 @@ def read_ai_usage(section: Section, runner: Runner = run_capped, hermes: Optiona
                                          (f", {last_line(stderr)}" if last_line(stderr) else "")))
             logged.append(f"{label}: " + ("unavailable" if reason else f"exit {code}"))
             continue
-        items.extend(_usage_items(data, label, warn))
+        items.extend(_usage_items(data, name, warn, section.options.get("labels")))
     notes = []
     if failed:
         notes.append("could not be read: " + ", ".join(failed))

@@ -146,6 +146,12 @@ def test_tool_error_shown_but_not_logged(tmp_path, caplog):
     assert caplog.records and not any("SYNTHETIC_PRIVATE_TOOL_RESULT" in r.getMessage() for r in caplog.records)
 
 
+def test_progress_mapped_from_a_number():
+    data = json.dumps([{"name": "a", "pct": 55, "state": "good"}, {"name": "b", "pct": "55", "state": "pink"}])
+    out = dp_sources.map_mcp_result(data, {"fields": {"title": "name", "progress": "pct", "tone": "state"}}, 10)
+    assert out["items"] == [{"title": "a", "progress": 55, "tone": "good"}, {"title": "b"}]
+
+
 def test_element_without_title():
     data = json.dumps([{"title": "a"}, {"note": "x"}, {"title": "c"}])
     out = dp_sources.map_mcp_result(data, {"fields": {"title": "title"}}, 10)

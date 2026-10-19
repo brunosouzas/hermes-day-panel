@@ -20,6 +20,21 @@ The Desktop page ships disabled, like every plugin's desktop half: turn it on in
 
 Requires Hermes 0.22.2 or newer, macOS or Linux. `gh` is needed only for `github_prs`.
 
+## Try it
+
+The plugin ships a demo page that needs no login, network or MCP server. Each of its sections runs `examples/demo/demo_source.py` with sample data:
+
+```bash
+hermes config set plugins.entries.day-panel.settings.sources_file ~/.hermes/plugins/day-panel/examples/demo/sources.yaml
+hermes day show
+```
+
+Then open **Today** in Hermes Desktop:
+
+![The Today page with the demo sources](docs/today.png)
+
+To build your own page, copy `examples/demo/sources.yaml` and `demo_source.py` to a folder of yours, point `sources_file` at the copy and replace the sections one at a time.
+
 ## The sources file
 
 By default the plugin reads `$HERMES_HOME/day-panel/sources.yaml`. To keep it somewhere else (a private repository, say), set the plugin's `sources_file` setting:
@@ -92,7 +107,18 @@ The program runs without a shell, with no standard input, in the sources file's 
  "total": 7, "note": "Showing open cards only."}
 ```
 
-`title` is required; `url` (http or https only), `detail`, `badge` and `time` are optional text; text is cut to 300 characters. An item without a text title is dropped, an optional field that is not text is dropped, and a `total` or `note` of the wrong type is ignored. A non-zero exit shows the exit status and the last line of standard error as the section's error.
+| Item field | Type | Shown as |
+|---|---|---|
+| `title` | text, required | the item's title; a link when `url` is set |
+| `url` | `http` or `https` link | opens in your browser |
+| `detail` | text | a second, smaller line |
+| `badge` | text | a small label after the title |
+| `time` | ISO 8601 time | "12 min ago", "in 3 h" or "16 Oct 17:28" on the right |
+| `time_label` | text, up to 40 characters | a word before the time: "resets in 40 min", "updated 2 h ago" |
+| `tone` | `good`, `warn`, `bad` or `muted` | the badge's colour (green, amber, red, grey); without a badge, a dot of that colour before the title |
+| `progress` | number from 0 to 100 | a bar under the title, in the tone's colour |
+
+Text is cut to 300 characters. An item without a text title is dropped; an optional field of the wrong type (a `tone` that is not one of the four words, a `progress` outside 0-100 or not a number) is dropped and the item kept; a `total` or `note` of the wrong type is ignored. A non-zero exit shows the exit status and the last line of standard error as the section's error.
 
 ### `github_prs`
 
@@ -115,7 +141,7 @@ Each item is `owner/repo#number · title`, with badge `draft` or `review request
 | `server` | required; the name of a server in your Hermes `mcp_servers` |
 | `tool` | required; the tool's name on that server (not the `mcp__…` name) |
 | `args` | mapping of JSON values passed to the tool; default `{}` |
-| `fields` | mapping of item fields (`title`, `detail`, `badge`, `time`, `url`) to keys of each result element; `title` required; default `{title: title}` |
+| `fields` | mapping of item fields (`title`, `detail`, `badge`, `time`, `time_label`, `url`, `tone`, `progress`) to keys of each result element; `title` required; default `{title: title}`. Values that are not text become text, except `progress`, which must be a number |
 | `list_key` | when the result is a JSON object, the key of its list |
 
 The call runs in a separate Hermes Python process that is stopped at `timeout_s`. It is **refused, without calling the tool, unless the server marks the tool read-only** (`readOnlyHint: true`). Hermes records that hint when it connects. The tool's text result is decoded as JSON, either the whole text or from the first line starting with `[` or `{`. A list is the item list; an object needs `list_key`; `null` means no items; another value becomes one item. Text that is not JSON becomes one item per line. Elements without the mapped title are skipped, and the note says how many.
@@ -127,13 +153,21 @@ Tip: a server entry that includes only the read tools (`tools.include` in `mcp_s
 | Option | Rule |
 |---|---|
 | `providers` | list of up to 10 Hermes provider names; empty = the configured provider |
-| `warn_percent` | 1-100, default 80; windows at or above it get the badge `high` |
+| `warn_percent` | 1-100, default 80; windows at or above it get the badge `high` and turn amber |
+| `labels` | mapping of a provider name to the name shown, 1-40 characters each; default none |
 
-For each provider, in order, the plugin runs `hermes usage --json --provider <name>`. Each limit window becomes an item, such as `anthropic · Current week, 62% used`, with its reset time. A provider that fails is named in the note. When none can be read, or the section's `timeout_s` runs out first, the section shows the error.
+For each provider, in order, the plugin runs `hermes usage --json --provider <name>`. Each limit window becomes an item with a bar of the percent used, such as `Claude · Current week`, `62% used`, "resets in 2 h". The name is the provider name `hermes usage` reports (else the one you listed), replaced by its label when you set one:
+
+```yaml
+options:
+  providers: [claude-subscription, openai-codex]
+  labels: {claude-subscription: Claude, openai-codex: Codex}
+```
+ A provider that fails is named in the note. When none can be read, or the section's `timeout_s` runs out first, the section shows the error.
 
 ## The page
 
-Sections appear as cards in file order, in as many columns as the window fits. Each card shows its status as a dot: green for **ok**, amber for **stale** (the latest read failed; the last good items are still shown with the new error), red for **error** (no good read yet); stale and error are also written next to the title. Each card shows how long ago it was read (the exact time on hover), and times on items read the same way: "12 min ago", "in 3 h", "16 Oct 17:28". The page asks for the sections when it opens and every 60 seconds; only sections older than their `refresh_minutes` are read again. **Refresh** on a section, or **Refresh all**, reads now. At most four reads run at once, and a refresh for a section that is already being read waits for that read. Results live in memory: after a restart, the first page load reads every section.
+Sections appear as cards in file order, in as many columns as the window fits. Each card shows its status as a dot: the theme's primary colour for **ok**, amber for **stale** (the latest read failed; the last good items are still shown with the new error), red for **error** (no good read yet); stale and error are also written next to the title. Each card shows how long ago it was read (the exact time on hover), and times on items read the same way: "12 min ago", "in 3 h", "16 Oct 17:28". Items show their `tone`, `progress` and `time_label` as the item fields table above says. The page asks for the sections when it opens and every 60 seconds; only sections older than their `refresh_minutes` are read again. **Refresh** on a section, or **Refresh all**, reads now. At most four reads run at once, and a refresh for a section that is already being read waits for that read. Results live in memory: after a restart, the first page load reads every section.
 
 ### Look and theme
 
@@ -144,7 +178,8 @@ The page uses the Desktop's own components and colour tokens, so it follows the 
 | `--dp-columns` | Minimum card width per column | `minmax(360px, 1fr)` |
 | `--dp-radius` | Card corner radius | the theme's `--radius-lg` |
 | `--dp-link` | Link colour | the theme's primary colour |
-| `--dp-border`, `--dp-card`, `--dp-muted`, `--dp-danger` | Card border and fill, secondary text, errors | the theme's matching tokens |
+| `--dp-border`, `--dp-card`, `--dp-muted`, `--dp-danger` | Card border and fill, secondary text, errors and `bad` | the theme's matching tokens |
+| `--dp-good`, `--dp-warn` | The `good` and `warn` tones (dots and bars) | the theme's green and yellow |
 
 For example, `.day-panel-page { --dp-columns: minmax(480px, 1fr); }` gives wider cards and fewer columns.
 
