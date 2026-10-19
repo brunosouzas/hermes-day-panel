@@ -76,6 +76,26 @@ def test_command_not_json(tmp_path):
         dp_sources.read_command(s)
 
 
+def test_valid_tone_and_progress(tmp_path):
+    s = cmd(tmp_path, """
+        import json
+        print(json.dumps({"items": [{"title": "build", "tone": "bad", "progress": 40, "time_label": "finished"}]}))
+    """)
+    [item] = dp_sources.read_command(s)["items"]
+    assert item == {"title": "build", "tone": "bad", "progress": 40, "time_label": "finished"}
+
+
+def test_out_of_range_values_dropped(tmp_path):
+    s = cmd(tmp_path, """
+        import json
+        print(json.dumps({"items": [{"title": "x", "tone": "purple", "progress": 140},
+                                    {"title": "y", "progress": True, "time_label": "%s"}]}))
+    """ % ("w" * 60))
+    x, y = dp_sources.read_command(s)["items"]
+    assert x == {"title": "x"}
+    assert y == {"title": "y", "time_label": "w" * 40}
+
+
 def test_command_malformed_optional_fields(tmp_path):
     s = cmd(tmp_path, """
         import json; print(json.dumps({"items": [{"title": "x", "detail": {}}, {"title": 3}], "total": "many", "note": []}))
@@ -219,6 +239,37 @@ def test_usage_two_providers(tmp_path):
     assert len(out["items"]) == 4
     assert [i["title"] for i in out["items"] if i.get("badge") == "high"] == ["anthropic · Week"]
     assert out["items"][1]["detail"] == "85% used" and "note" not in out
+
+
+def test_usage_labelled_window(tmp_path):
+    data = usage("claude-x", ("Current session", 68))
+    data["windows"][0]["resets_at"] = "2026-10-19T16:00:00Z"
+    runner = FakeRunner(lambda argv: ok(data))
+    s = section(tmp_path, kind="ai_usage",
+                options={"providers": ["claude-x"], "warn_percent": 80, "labels": {"claude-x": "Claude"}})
+    [item] = dp_sources.read_ai_usage(s, runner=runner, hermes="hermes")["items"]
+    assert item == {"title": "Claude · Current session", "detail": "68% used", "time": "2026-10-19T16:00:00Z",
+                    "time_label": "resets", "progress": 68}
+
+
+def test_usage_window_exactly_at_the_warning_level(tmp_path):
+    runner = FakeRunner(lambda argv: ok(usage("openai-codex", ("Weekly", 80))))
+    s = section(tmp_path, kind="ai_usage", options={"providers": ["openai-codex"], "warn_percent": 80, "labels": {}})
+    [item] = dp_sources.read_ai_usage(s, runner=runner, hermes="hermes")["items"]
+    assert item["title"] == "openai-codex · Weekly"
+    assert item["badge"] == "high" and item["tone"] == "warn"
+
+
+def test_usage_no_provider_name_reported(tmp_path):
+    data = usage("ignored", ("Session", 10))
+    del data["provider"]
+    runner = FakeRunner(lambda argv: ok(data))
+    s = section(tmp_path, kind="ai_usage", options={"providers": ["codex"], "warn_percent": 80, "labels": {"codex": "Codex"}})
+    [item] = dp_sources.read_ai_usage(s, runner=runner, hermes="hermes")["items"]
+    assert item["title"] == "Codex · Session"
+    none = section(tmp_path, kind="ai_usage", options={"providers": [], "warn_percent": 80, "labels": {}})
+    [item] = dp_sources.read_ai_usage(none, runner=FakeRunner(lambda argv: ok(data)), hermes="hermes")["items"]
+    assert item["title"] == "provider · Session"
 
 
 def test_usage_one_provider_fails(tmp_path):

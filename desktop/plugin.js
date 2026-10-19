@@ -91,6 +91,19 @@ export function shortTime (value, now = Date.now()) {
 }
 
 const STATUS_TONE = { ok: 'good', stale: 'warn', error: 'bad' }
+// An item's tone (validated by the backend) as a Badge variant; no tone keeps the page's quiet badge.
+const BADGE_VARIANT = { good: 'success', warn: 'warn', bad: 'destructive', muted: 'muted' }
+const TONES = ['good', 'warn', 'bad', 'muted']
+
+export function itemTone (item) {
+  return TONES.includes(item?.tone) ? item.tone : null
+}
+
+/** The bar's fill in percent, or null when the item has no usable progress. */
+export function progressOf (item) {
+  const p = item?.progress
+  return typeof p === 'number' && Number.isFinite(p) && p >= 0 && p <= 100 ? p : null
+}
 
 export function canMerge (section, item) {
   return !!(section?.merge && item?.pr && !item.pr.draft)
@@ -109,6 +122,9 @@ export const confirmMerge = (restFn, token) => restFn('/merge/confirm', { method
 export function ItemRow ({ section, item, onOpen, onMerge, now }) {
   const link = safeLink(item.url)
   const merge = canMerge(section, item)
+  const tone = itemTone(item)
+  const progress = progressOf(item)
+  const when = item.time ? shortTime(item.time, now) : ''
   const title = link
     ? jsx('a', {
       href: link, 'data-action': 'open', className: `${ID}-link`, title: link,
@@ -122,11 +138,29 @@ export function ItemRow ({ section, item, onOpen, onMerge, now }) {
     children: [
       jsxs('div', {
         className: `${ID}-item-main`,
-        children: [title, item.badge ? jsx(Badge, { variant: 'muted', 'data-role': 'badge', children: text(item.badge) }) : null]
+        children: [
+          // Our own dot, not StatusDot: the Desktop's StatusDot draws "good" in the primary colour,
+          // and an item's good must match the green success badge.
+          tone && !item.badge ? jsx('span', { className: `${ID}-dot`, 'data-role': 'tone-dot', 'data-tone': tone, title: tone }) : null,
+          title,
+          item.badge
+            ? jsx(Badge, { variant: BADGE_VARIANT[tone] || 'muted', 'data-role': 'badge', children: text(item.badge) })
+            : null
+        ]
       }),
       item.time
-        ? jsx('span', { className: `${ID}-time`, 'data-role': 'time', title: formatTime(item.time), children: shortTime(item.time, now) })
+        ? jsx('span', {
+          className: `${ID}-time`, 'data-role': 'time', title: formatTime(item.time),
+          children: item.time_label ? `${text(item.time_label)} ${when}` : when
+        })
         : null,
+      progress === null
+        ? null
+        : jsx('div', {
+          className: `${ID}-bar`, 'data-role': 'progress', 'data-tone': tone || 'none',
+          role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': progress,
+          children: jsx('div', { className: `${ID}-bar-fill`, style: { width: `${progress}%` } })
+        }),
       item.detail || merge
         ? jsxs('div', {
           className: `${ID}-item-sub`,
@@ -324,6 +358,8 @@ const STYLE = `
   --dp-card:var(--color-card,var(--card,transparent));
   --dp-link:var(--color-primary,var(--primary,#2f6fdd));
   --dp-danger:var(--color-destructive,var(--destructive,#d0393e));
+  --dp-good:var(--ui-green,#1f8a65);
+  --dp-warn:var(--ui-yellow,#c08532);
   --dp-hover:color-mix(in srgb,var(--dp-fg) 5%,transparent);
   --dp-radius:var(--radius-lg,10px);
   --dp-columns:minmax(360px,1fr);
@@ -345,6 +381,16 @@ const STYLE = `
 .${ID}-item:hover{background:var(--dp-hover)}
 .${ID}-item-main{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap;font-size:13px;line-height:1.35}
 .${ID}-item > .${ID}-time{align-self:start;padding-top:2px}
+.${ID}-dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none;background:var(--dp-muted)}
+.${ID}-dot[data-tone="good"]{background:var(--dp-good)}
+.${ID}-dot[data-tone="warn"]{background:var(--dp-warn)}
+.${ID}-dot[data-tone="bad"]{background:var(--dp-danger)}
+.${ID}-bar{grid-column:1 / -1;height:4px;margin:3px 0 1px;border-radius:2px;background:color-mix(in srgb,var(--dp-fg) 10%,transparent);overflow:hidden}
+.${ID}-bar-fill{height:100%;border-radius:2px;background:var(--dp-link)}
+.${ID}-bar[data-tone="good"] .${ID}-bar-fill{background:var(--dp-good)}
+.${ID}-bar[data-tone="warn"] .${ID}-bar-fill{background:var(--dp-warn)}
+.${ID}-bar[data-tone="bad"] .${ID}-bar-fill{background:var(--dp-danger)}
+.${ID}-bar[data-tone="muted"] .${ID}-bar-fill{background:var(--dp-muted)}
 .${ID}-item-sub{grid-column:1 / -1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--dp-muted);font-size:12px}
 .${ID}-link{color:var(--dp-link);text-decoration:none;overflow-wrap:anywhere;cursor:pointer}
 .${ID}-link:hover{text-decoration:underline}

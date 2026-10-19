@@ -32,7 +32,7 @@ def test_missing_file(tmp_path):
 def test_defaults_applied(tmp_path):
     s = dp_config.load(write_sources(tmp_path, [{"id": "usage", "kind": "ai_usage"}])).sections[0]
     assert (s.title, s.enabled, s.refresh_minutes, s.max_items, s.timeout_s) == ("usage", True, 15, 10, 30)
-    assert s.options == {"providers": [], "warn_percent": 80}
+    assert s.options == {"providers": [], "warn_percent": 80, "labels": {}}
 
 
 def test_unknown_kind(tmp_path):
@@ -44,6 +44,15 @@ def test_unknown_kind(tmp_path):
 def test_value_out_of_bounds(tmp_path):
     [error] = errors_of(tmp_path, [{"id": "u", "kind": "ai_usage", "refresh_minutes": 0}])
     assert "refresh_minutes must be between 1 and 1440" in error
+
+
+def test_label_that_is_not_text(tmp_path):
+    errors = errors_of(tmp_path, [{"id": "usage", "kind": "ai_usage", "options": {"labels": {"openai-codex": 5}}}])
+    assert any("usage" in e and "labels must map provider names to text of 1 to 40 characters" in e for e in errors)
+    assert errors_of(tmp_path, [{"id": "usage", "kind": "ai_usage", "options": {"labels": {"x": "y" * 41}}}])
+    ok = dp_config.load(write_sources(tmp_path, [{"id": "usage", "kind": "ai_usage",
+                                                 "options": {"labels": {"claude-x": " Claude "}}}]))
+    assert ok.sections[0].options["labels"] == {"claude-x": "Claude"}
 
 
 def test_unknown_option(tmp_path):

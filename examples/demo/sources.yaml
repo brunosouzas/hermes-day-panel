@@ -1,0 +1,46 @@
+# hermes-day-panel demo: every section reads sample data from demo_source.py, next to this file.
+# No login, network or MCP server is needed. Try it with:
+#   hermes config set plugins.entries.day-panel.settings.sources_file ~/.hermes/plugins/day-panel/examples/demo/sources.yaml
+#   hermes day show
+# then open Today in Hermes Desktop. To build your own page, copy this file and replace the sections.
+sections:
+  - id: cards
+    title: Cards
+    kind: command
+    options: {argv: ["{python}", demo_source.py, cards]}
+
+  - id: prs
+    title: Pull requests
+    kind: command
+    options: {argv: ["{python}", demo_source.py, prs]}
+    # Your real pull requests instead (needs the gh CLI, logged in):
+    # kind: github_prs
+
+  - id: pipelines
+    title: Pipelines
+    kind: command
+    refresh_minutes: 5
+    options: {argv: ["{python}", demo_source.py, pipelines]}
+
+  - id: routine
+    title: Today's routine
+    kind: command
+    options: {argv: ["{python}", demo_source.py, routine]}
+    # A read-only tool of an MCP server you configured in Hermes instead:
+    # kind: mcp_tool
+    # options: {server: my-planner, tool: get_today, fields: {title: title, detail: note}}
+
+  - id: usage
+    title: AI usage
+    kind: command
+    options: {argv: ["{python}", demo_source.py, usage]}
+
+  # Your real plan limits from `hermes usage`; turn it on and name your providers:
+  - id: my-usage
+    title: My AI usage
+    kind: ai_usage
+    enabled: false
+    options:
+      providers: []        # empty: the provider Hermes is configured with
+      labels: {}           # e.g. {openai-codex: Codex}
+      warn_percent: 80
