@@ -43,4 +43,4 @@ Tests: `.venv/bin/python -m pytest -q` (unit, offline: `gh`, `hermes usage` and 
 ## 8. Documentation and acceptance
 
 - [x] 8.1 README: install, the sources file with every field and option, each kind with an example, the command output format, the merge guard, "What it reads, sends and writes". Check: `tests/test_readme.py::test_every_option_documented` finds every field and option name from `dp_config.py` in the README.
-- [ ] 8.2 Acceptance on the owner's Mac, with his sources from `hermes-personal`: the page shows real data from every section (screenshot in the pull request), and `hermes day show` prints the same sections.
+- [x] 8.2 Acceptance on the owner's Mac, with his sources from `hermes-personal`: the page shows real data from every section (screenshot in the pull request), and `hermes day show` prints the same sections.
