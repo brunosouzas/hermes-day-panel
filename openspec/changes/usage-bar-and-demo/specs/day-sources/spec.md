@@ -122,7 +122,7 @@ An item's `tone` SHALL be one of `good`, `warn`, `bad` or `muted`, and its `prog
 
 ### Requirement: AI usage items
 
-Each window SHALL become an item titled `<label> · <window label>`, where the label is `labels[<provider>]` for the provider name `hermes usage` reports, else that name. Its detail is `NN% used` (followed by the plan when one is reported), `time` the reset time with `time_label` `resets`, and `progress` the percent used. At or above `warn_percent` it also gets the badge `high` and tone `warn`.
+Each window SHALL become an item titled `<label> · <window label>`. The provider name is the `provider` text `hermes usage` reports, else the name asked for, else `provider`; the label is `labels[<that name>]`, else the name. Detail `NN% used` (plus the plan when reported), `time` the reset time with `time_label` `resets`, `progress` the percent used. At or above `warn_percent`: badge `high` and tone `warn`.
 
 #### Scenario: Labelled window
 
@@ -130,8 +130,14 @@ Each window SHALL become an item titled `<label> · <window label>`, where the l
 - **WHEN** the section is read
 - **THEN** the item is titled `Claude · Current session`, with detail `68% used`, `progress` 68, `time_label` `resets` and that reset time, and no badge or tone
 
-#### Scenario: High window
+#### Scenario: Window exactly at the warning level
 
-- **GIVEN** a provider with no label reporting window `Weekly` at 92% and `warn_percent: 80`
+- **GIVEN** provider `openai-codex` with no label reporting window `Weekly` at exactly 80% and `warn_percent: 80`
 - **WHEN** the section is read
-- **THEN** the item is titled `<provider name> · Weekly`, has the badge `high` and tone `warn`
+- **THEN** the item is titled `openai-codex · Weekly`, has the badge `high` and tone `warn`
+
+#### Scenario: No provider name reported
+
+- **GIVEN** `providers: [codex]`, `labels: {codex: Codex}`, and `hermes usage` output without a `provider` field
+- **WHEN** the section is read
+- **THEN** the items are titled `Codex · <window label>`

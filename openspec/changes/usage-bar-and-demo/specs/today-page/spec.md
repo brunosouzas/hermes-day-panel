@@ -34,6 +34,18 @@ The page SHALL show an item's tone as the colour of its badge (`good` success, `
 - **WHEN** the page shows it
 - **THEN** a bar under the title is filled to 68% in the warning colour, and the time reads `resets in 40 min`
 
+#### Scenario: Badge coloured by tone
+
+- **GIVEN** an item with badge `failed` and tone `bad`, and another with badge `ok` and no tone
+- **WHEN** the page shows them
+- **THEN** `failed` is drawn as a destructive badge and `ok` as a default badge
+
+#### Scenario: Tone without a badge
+
+- **GIVEN** an item with tone `good` and no badge
+- **WHEN** the page shows it
+- **THEN** a dot in the success colour is drawn before its title
+
 #### Scenario: Empty bar and no tone
 
 - **GIVEN** an item with `progress` 0 and no tone, badge or time
