@@ -12,7 +12,7 @@ A Desktop page "Today" SHALL show the date and every enabled section in file ord
 
 #### Scenario: Sections shown
 
-- **GIVEN** a sources file with sections `prs` (2 items) and `usage` (an error)
+- **GIVEN** a sources file with sections `prs` (2 items) and `usage` (status `error`)
 - **WHEN** the user opens the page
 - **THEN** both sections are shown in that order: `prs` with its 2 items, `usage` with its error
 
@@ -26,7 +26,7 @@ A Desktop page "Today" SHALL show the date and every enabled section in file ord
 
 - **GIVEN** a sources file that fails validation
 - **WHEN** the user opens the page
-- **THEN** the page shows the validation error and no sections
+- **THEN** the page shows the validation errors and no sections
 
 ### Requirement: Opening links
 
@@ -40,7 +40,7 @@ The page SHALL open an item's link only when it is an absolute http(s) URL, in t
 
 ### Requirement: Refreshing
 
-The page SHALL ask for the sections when it opens and every 60 seconds while it is open; the backend reads only sections whose results are older than their interval. A refresh control on each section and one for the whole page force a read. Routes take a section id, never a path or a program.
+The page SHALL ask for the sections when it opens and every 60 seconds while it is open; the backend reads only sections whose results are older than their interval. A refresh control on each section and one for the whole page force a read. Routes take a section id, never a path or a program; an id not among the enabled sections answers 404.
 
 #### Scenario: Refresh one section
 
@@ -52,9 +52,9 @@ The page SHALL ask for the sections when it opens and every 60 seconds while it 
 - **WHEN** the backend is asked to refresh section `../etc`
 - **THEN** it answers 404 and nothing runs
 
-### Requirement: Merge preview
+### Requirement: Merge setting
 
-When a `github_prs` section has `options.merge.enabled: true` (default false), each non-draft item SHALL offer "Merge…". A preview reads the pull request now and shows repository, number, title, base branch, head commit and merge method (`options.merge.method`: `squash`, `merge` or `rebase`, default `squash`), with a confirmation token valid once, for 120 seconds.
+A `github_prs` section MAY set `options.merge` to a mapping with `enabled` (boolean, default false) and `method` (`squash`, `merge` or `rebase`, default `squash`). Only when `enabled` is true SHALL the page offer "Merge…" on its non-draft items, and the backend accept a merge preview for that section; otherwise a preview answers 409.
 
 #### Scenario: Merge off by default
 
@@ -62,19 +62,29 @@ When a `github_prs` section has `options.merge.enabled: true` (default false), e
 - **WHEN** the page shows its items
 - **THEN** no item offers "Merge…", and a preview request for that section answers 409
 
+### Requirement: Merge preview
+
+A merge preview for one item SHALL read the pull request now through `gh` and return repository, number, title, base branch, head commit and method, with a token bound to the section, the pull request, the head commit and the method, valid once for 120 seconds. A draft or closed pull request is refused with 409. The page shows the preview and asks for an explicit confirmation; cancelling sends nothing.
+
 #### Scenario: Draft pull request
 
 - **GIVEN** merge is enabled and the pull request is a draft
 - **WHEN** a preview is asked for
-- **THEN** it is refused with "draft pull requests are not merged"
+- **THEN** it answers 409 with "draft pull requests are not merged"
+
+#### Scenario: Preview shown and cancelled
+
+- **GIVEN** a preview of `owner/repo#7`
+- **WHEN** the page shows it and the user presses Cancel
+- **THEN** the dialog closes and no confirm request is sent
 
 ### Requirement: Merge confirmation
 
-Confirming a valid token SHALL run `gh pr merge` with the previewed method and `--match-head-commit <previewed head>`, without deleting the branch, and show the outcome. An expired, unknown or used token, or a merge already running, is refused without running anything.
+Confirming SHALL first consume the token, then re-read the sources file and check that the section still exists with merge enabled and the same method; then run `gh pr merge` with that method and `--match-head-commit <previewed head>`, without deleting the branch. Any failed check answers 409 without running `gh`. One merge runs at a time; a second confirm meanwhile answers 409.
 
 #### Scenario: Confirmed merge
 
-- **GIVEN** a preview of `owner/repo#7` with head `abc123`
+- **GIVEN** a preview of `owner/repo#7` with head `abc123`, and a `gh` that merges successfully
 - **WHEN** the user confirms within 120 seconds
 - **THEN** `gh pr merge` runs once for that pull request with `--squash --match-head-commit abc123`, and the page shows it merged
 
@@ -84,8 +94,24 @@ Confirming a valid token SHALL run `gh pr merge` with the previewed method and `
 - **WHEN** it is confirmed again
 - **THEN** the answer is 409 and `gh` does not run
 
+#### Scenario: Token expired
+
+- **GIVEN** a preview older than 120 seconds
+- **WHEN** it is confirmed
+- **THEN** the answer is 409 and `gh` does not run
+
+#### Scenario: Merge turned off after the preview
+
+- **GIVEN** a preview, after which the sources file sets `merge.enabled: false` for that section
+- **WHEN** the user confirms
+- **THEN** the answer is 409, `gh` does not run, and the token cannot be used again
+
+### Requirement: Merge failure
+
+When `gh pr merge` fails (head moved, checks pending, no permission, network), the backend SHALL return its exit status and last line of standard error, and the page SHALL show them. The token stays used; another attempt needs a new preview.
+
 #### Scenario: Head moved
 
-- **GIVEN** a new commit was pushed after the preview
+- **GIVEN** a new commit was pushed after the preview, so `gh` exits non-zero
 - **WHEN** the user confirms
-- **THEN** `gh` refuses the merge, and the page shows its error
+- **THEN** the page shows `gh`'s error, and confirming the same token again answers 409

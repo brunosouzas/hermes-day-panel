@@ -51,19 +51,18 @@ None (new repository).
 
 ## Open questions
 
-None. Decisions made from the card, for the owner to confirm at gate 1:
+1. What does "AI usage" mean on the page? Proposed: the provider limit windows that `hermes usage` reports (session and week, used percent, reset time) for the providers the user lists. Token and cost history (`hermes insights`) would be a later change. The `ai_usage` kind waits for the owner's answer at gate 1.
 
-1. "AI usage" means the provider limit windows (`hermes usage`), because the owner uses subscriptions (Claude Max, ChatGPT Plus), not metered keys.
-2. Merge is opt-in per section and guarded by the head commit. The card asks for "merge only with confirmation".
+Decision taken from the card, for the owner to confirm: merge is opt-in per section, needs a preview and a confirmation, and is guarded by the head commit. The card asks for "merge only with confirmation".
 
 ## Implicit requirements
 
-- **Errors and invalid input**: required. A sources file that fails validation is reported on the page and by `hermes day check`, naming the section and the rule. A section whose source fails shows its error and keeps its last good items, marked stale. One failing section never blocks the others.
-- **Limits**: required. Command timeout 1–120 s (default 30), standard output at most 256 KiB, at most 50 items per section (default 10), text fields cut to 300 characters, at most 20 sections, refresh interval 1–1440 minutes (default 15). A merge confirmation expires after 120 s.
-- **Repetition and idempotency**: required. A refresh request for a section already being read joins that read instead of starting another. A merge confirmation token works once; a second confirm is refused.
-- **Concurrency**: required. At most one read per section at a time, and at most four sections read in parallel. Only one merge runs at a time.
-- **Security**: required. Programs come only from the sources file, run without a shell, and are never given anything from the page. Routes take section ids, never paths or arguments. Source output is untrusted: it is rendered as text, and only http(s) links open. `mcp_tool` refuses a tool that is not marked read-only. Merge is off unless the user's sources file turns it on, needs a confirmation bound to one preview, and checks the head commit.
-- **Logs and observability**: required. Each section shows its status (ok, error, stale), when it was last read and how long the read took. The plugin logs one line per failed read with the section id and the reason, never the source's output.
+- **Errors and invalid input**: required. A sources file that fails validation is reported on the page and by `hermes day check`, naming the section and the rule. A section whose read fails shows its error, and keeps its last good items marked stale when it has them. One failing section never blocks the others.
+- **Limits**: required. Per section: read timeout 1–120 s (default 30), at most 50 items (default 10), refresh interval 1–1440 minutes (default 15). Command standard output at most 256 KiB, text fields cut to 300 characters, at most 20 sections. A merge confirmation expires after 120 s.
+- **Repetition and idempotency**: required. A refresh request for a section already being read joins that read instead of starting another. A merge confirmation token works once, whatever the outcome; a second confirm is refused.
+- **Concurrency**: required. At most one read per section definition at a time, and at most four reads in parallel. A changed section definition gets a fresh read, and a read finishing for the old definition is discarded. Only one merge runs at a time.
+- **Security**: required. Programs come only from the sources file, run without a shell, and are never given anything from the page. Routes take section ids, never paths or arguments. Source output is untrusted: it is rendered as text, and only http(s) links open. `mcp_tool` refuses a tool that is not marked read-only. Merge is off unless the user's sources file turns it on, needs a confirmation bound to one preview, re-checks the sources file on confirmation, and checks the head commit.
+- **Logs and observability**: required. Each section shows its status (ok, error, stale), when it was last read and how long the read took. The plugin logs one warning per failed read with the section id, kind and error, never the source's output.
 
 ## Impact
 
