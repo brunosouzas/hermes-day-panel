@@ -146,10 +146,16 @@ def _command_options(c: _Check, where: str, opts: Dict[str, Any]) -> Dict[str, A
         return out
     if "argv" not in opts:
         c.fail(where, "option argv is required (a list of strings, the program first)")
+        return out
+    argv = opts["argv"]
+    if not isinstance(argv, list) or not all(isinstance(a, str) for a in argv):
+        c.fail(where, "argv must be a list of strings")
+    elif not 1 <= len(argv) <= 50:
+        c.fail(where, f"argv must have between 1 and 50 entries (got {len(argv)})")
+    elif not argv[0].strip():
+        c.fail(where, "argv must start with a program name")
     else:
-        argv = c.text_list(where, "argv", opts["argv"], 1, 50)
-        if argv is not None:
-            out["argv"] = argv
+        out["argv"] = list(argv)  # later arguments may be any string, empty ones included
     return out
 
 

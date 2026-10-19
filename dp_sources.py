@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import json
 import os
+import selectors
 import shutil
 import signal
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -26,6 +26,7 @@ STDERR_KEEP = 4096
 TOOL_PREFIXES = ("/opt/homebrew/bin", "/usr/local/bin", str(Path.home() / ".local" / "bin"))
 CHILD = Path(__file__).resolve().parent / "dp_mcp_child.py"
 RESULT_MARK = "DAY_PANEL_RESULT "
+EXIT_GRACE_S = 0.5  # how long output may stay open after the program exits
 
 
 class ReadError(RuntimeError):
@@ -47,80 +48,100 @@ def run_capped(argv: List[str], timeout: float, cwd: Optional[Path] = None, stdi
                cap: int = STDOUT_CAP, env: Optional[Dict[str, str]] = None) -> Completed:
     """Run argv without a shell, all within one deadline: writing stdin, running, and draining output.
 
-    The program runs in its own process group. That group is killed at the deadline, when stdout
-    passes cap, and also once the program exits, so a descendant left holding the pipes can neither
-    keep the read open nor outlive it.
+    One loop over non-blocking pipes (no threads, nothing that can block past the deadline). The
+    program runs in its own process group, which is killed at the deadline, when stdout passes cap,
+    and once the program exits, so nothing it started stays behind. A pipe still open shortly after
+    the exit (held by a process that left the group) ends the read with an error.
     """
     deadline = time.monotonic() + timeout
     try:
-        proc = subprocess.Popen(argv, cwd=str(cwd) if cwd else None, env=env,
+        proc = subprocess.Popen(argv, cwd=str(cwd) if cwd else None, env=env, bufsize=0,
                                 stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     except FileNotFoundError:
         raise ReadError(f"program not found: {Path(argv[0]).name}") from None
     except OSError as exc:
         raise ReadError(f"could not start {Path(argv[0]).name}: {exc.strerror or exc}") from None
-    out = bytearray()
-    err = bytearray()
-    over = threading.Event()
-
-    def pump_out() -> None:
-        try:
-            while True:
-                chunk = proc.stdout.read1(65536)
-                if not chunk:
-                    return
-                if len(out) + len(chunk) > cap:
-                    over.set()
-                    _kill(proc)
-                    return
-                out.extend(chunk)
-        except (OSError, ValueError):
-            return
-
-    def pump_err() -> None:
-        try:
-            while True:
-                chunk = proc.stderr.read1(65536)
-                if not chunk:
-                    return
-                err.extend(chunk)
-                del err[:-STDERR_KEEP]
-        except (OSError, ValueError):
-            return
-
-    def feed() -> None:
-        try:
-            proc.stdin.write(stdin.encode("utf-8"))
+    out, err = bytearray(), bytearray()
+    pending = memoryview((stdin or "").encode("utf-8"))
+    sel = selectors.DefaultSelector()
+    for pipe, name in ((proc.stdout, "out"), (proc.stderr, "err")):
+        os.set_blocking(pipe.fileno(), False)
+        sel.register(pipe, selectors.EVENT_READ, name)
+    if stdin is not None:
+        os.set_blocking(proc.stdin.fileno(), False)
+        if pending:
+            sel.register(proc.stdin, selectors.EVENT_WRITE, "in")
+        else:
             proc.stdin.close()
-        except (OSError, ValueError):
-            pass
-
-    readers = [threading.Thread(target=pump_out, daemon=True), threading.Thread(target=pump_err, daemon=True)]
-    threads = readers + ([threading.Thread(target=feed, daemon=True)] if stdin is not None else [])
-    for t in threads:
-        t.start()
-    timed_out = False
+    outcome, exited_at = "", None
     try:
-        code = proc.wait(timeout=max(0.0, deadline - time.monotonic()))
-    except subprocess.TimeoutExpired:
-        timed_out = True
-    _kill(proc)  # the deadline passed, or the program exited: nothing of its group stays behind
-    if timed_out:
-        proc.wait()
-    for t in readers:
-        t.join(timeout=max(0.2, min(2.0, deadline - time.monotonic())))
-    for pipe in (proc.stdin, proc.stdout, proc.stderr):
+        while sel.get_map():
+            now = time.monotonic()
+            if now >= deadline:
+                outcome = "timeout"
+                break
+            if exited_at is None and proc.poll() is not None:
+                exited_at = now
+                _kill(proc)  # the program is done: end whatever it left running in its group
+            if exited_at is not None and now - exited_at > EXIT_GRACE_S:
+                outcome = "lingering"
+                break
+            for key, _events in sel.select(min(0.1, deadline - now)):
+                pipe = key.fileobj
+                if key.data == "in":
+                    try:
+                        written = os.write(pipe.fileno(), pending[:65536])
+                    except BlockingIOError:
+                        continue
+                    except OSError:  # the program closed its stdin: it does not want the rest
+                        written = len(pending)
+                    pending = pending[written:]
+                    if not pending:
+                        sel.unregister(pipe)
+                        pipe.close()
+                    continue
+                try:
+                    chunk = os.read(pipe.fileno(), 65536)
+                except BlockingIOError:
+                    continue
+                except OSError:
+                    chunk = b""
+                if not chunk:
+                    sel.unregister(pipe)
+                elif key.data == "out":
+                    if len(out) + len(chunk) > cap:
+                        outcome = "over"
+                        break
+                    out.extend(chunk)
+                else:
+                    err.extend(chunk)
+                    del err[:-STDERR_KEEP]
+            if outcome:
+                break
+        if not outcome:
+            try:
+                code = proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:  # closed its pipes but kept running
+                outcome = "timeout"
+    finally:
+        _kill(proc)
+        sel.close()
+        for pipe in (proc.stdin, proc.stdout, proc.stderr):
+            try:
+                if pipe and not pipe.closed:
+                    pipe.close()
+            except OSError:
+                pass
         try:
-            if pipe:
-                pipe.close()
-        except OSError:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:  # pragma: no cover - SIGKILL was sent to its group
             pass
-    if timed_out:
+    if outcome == "timeout":
         raise ReadError(f"timed out after {_seconds(timeout)} s")
-    if over.is_set():
+    if outcome == "over":
         raise ReadError(f"output larger than {cap // 1024} KiB")
-    if any(t.is_alive() for t in readers):
+    if outcome == "lingering":
         raise ReadError("output still open after the program exited (a process outside its group holds it)")
     return code, out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace")
 
@@ -392,6 +413,7 @@ def read_ai_usage(section: Section, runner: Runner = run_capped, hermes: Optiona
     failed: List[str] = []
     late: List[str] = []
     errors: List[str] = []
+    logged: List[str] = []  # what the log gets: labels and exit statuses, never provider output
     for name in providers:
         label = name or "configured provider"
         remaining = deadline - clock()
@@ -407,6 +429,7 @@ def read_ai_usage(section: Section, runner: Runner = run_capped, hermes: Optiona
             else:
                 failed.append(label)
                 errors.append(f"{label}: {exc}")
+                logged.append(f"{label}: {exc.log_message}")
             continue
         data = None
         if code == 0:
@@ -419,6 +442,7 @@ def read_ai_usage(section: Section, runner: Runner = run_capped, hermes: Optiona
             failed.append(label)
             errors.append(f"{label}: " + (str(reason)[:120] if reason else f"exit {code}" +
                                          (f", {last_line(stderr)}" if last_line(stderr) else "")))
+            logged.append(f"{label}: " + ("unavailable" if reason else f"exit {code}"))
             continue
         items.extend(_usage_items(data, label, warn))
     notes = []
@@ -427,7 +451,9 @@ def read_ai_usage(section: Section, runner: Runner = run_capped, hermes: Optiona
     if late:
         notes.append(f"not read in time ({section.timeout_s} s): " + ", ".join(late))
     if not items and (failed or late):
-        raise ReadError("; ".join(errors + ([notes[-1]] if late else [])) or "no provider could be read")
+        tail = [notes[-1]] if late else []
+        raise ReadError("; ".join(errors + tail) or "no provider could be read",
+                        log_message="; ".join(logged + tail) or "no provider could be read")
     return result(items, section.max_items, note="; ".join(notes) or None)
 
 

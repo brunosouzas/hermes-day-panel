@@ -71,6 +71,15 @@ def test_refresh_one_section(api):
     assert api["reads"] == ["prs"] and view["id"] == "prs" and view["read_at"]
 
 
+def test_refresh_one_reads_no_other_expired_section(api):
+    write_sources(api["path"].parent, [{"id": "prs", "kind": "github_prs"}, {"id": "usage", "kind": "ai_usage"}])
+    api["client"].get(f"{api['base']}/sections")
+    api["reads"].clear()
+    api["clock"].now += 16 * 60  # both sections are now older than their interval
+    api["client"].post(f"{api['base']}/sections/prs/refresh")
+    assert api["reads"] == ["prs"]
+
+
 def test_refresh_all(api):
     write_sources(api["path"].parent, [{"id": "prs", "kind": "github_prs"}, {"id": "usage", "kind": "ai_usage"}])
     api["client"].get(f"{api['base']}/sections")

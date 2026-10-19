@@ -80,9 +80,11 @@ class Panel:
         return entry is None or self.clock() - entry.read_mono >= section.refresh_minutes * 60
 
     def sections(self, sources: Sources, force: Iterable[str] = (), force_all: bool = False,
-                 wait: bool = True) -> List[Dict[str, Any]]:
-        """Views of the enabled sections in file order, reading those that are due or forced."""
+                 wait: bool = True, only: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
+        """Views of the enabled sections in file order, reading those that are due or forced.
+        With ``only``, nothing outside those ids is read (their cached views are still returned)."""
         forced = set(force)
+        limit = set(only) if only is not None else None
         enabled = sources.enabled
         futures = []
         with self.lock:
@@ -91,6 +93,8 @@ class Panel:
                 if key not in self.current:
                     del self.entries[key]
             for section in enabled:
+                if limit is not None and section.id not in limit:
+                    continue
                 if force_all or section.id in forced or self._due(section):
                     futures.append(self._start(section))
         if wait:

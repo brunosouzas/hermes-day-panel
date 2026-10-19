@@ -102,7 +102,7 @@ def _section(section_id: str):
 @router.post("/sections/{section_id}/refresh")
 def refresh_one(section_id: str) -> Dict[str, Any]:
     sources, section = _section(section_id)
-    views = _panel().sections(sources, force=[section.id])
+    views = _panel().sections(sources, force=[section.id], only=[section.id])
     return next(v for v in views if v["id"] == section.id)
 
 

@@ -64,6 +64,7 @@ def test_unknown_option(tmp_path):
     ([{"id": "a", "kind": "command"}], "option argv is required"),
     ([{"id": "a", "kind": "command", "options": {"argv": []}}], "argv must have between 1 and 50"),
     ([{"id": "a", "kind": "command", "options": {"argv": "date"}}], "argv must be a list"),
+    ([{"id": "a", "kind": "command", "options": {"argv": ["date", 3]}}], "argv must be a list of strings"),
     ([{"id": "a", "kind": "github_prs", "options": {"include": ["mine"]}}], "mine not allowed"),
     ([{"id": "a", "kind": "github_prs", "options": {"merge": {"enabled": "on"}}}], "merge.enabled must be true or false"),
     ([{"id": "a", "kind": "github_prs", "options": {"merge": {"method": "ff"}}}], "merge.method must be one of"),
@@ -79,6 +80,12 @@ def test_unknown_option(tmp_path):
 ])
 def test_validation_rules(tmp_path, sections, needle):
     assert any(needle in e for e in errors_of(tmp_path, sections)), errors_of(tmp_path, sections)
+
+
+def test_argv_later_arguments_may_be_empty(tmp_path):
+    s = dp_config.load(write_sources(tmp_path, [{"id": "c", "kind": "command", "options": {"argv": ["echo", "", " "]}}])).sections[0]
+    assert s.options["argv"] == ["echo", "", " "]
+    assert "argv must start with a program name" in errors_of(tmp_path, [{"id": "c", "kind": "command", "options": {"argv": [" "]}}])[0]
 
 
 def test_section_limit_and_top_level(tmp_path):

@@ -111,6 +111,57 @@ def test_descendant_holding_the_pipes_is_killed(tmp_path):
     assert not marker.exists()
 
 
+def _escaper(tmp_path, then):
+    pid_file = tmp_path / "escaped.pid"
+    body = f"""
+        import json, subprocess, sys
+        subprocess.Popen([sys.executable, "-c",
+            "import os, time, pathlib; os.setsid(); pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid())); time.sleep(20)"])
+        {then}
+    """
+    return script(tmp_path, body), pid_file
+
+
+def _reap(pid_file):
+    import os, signal
+    for _ in range(20):
+        if pid_file.exists() and pid_file.read_text():
+            try:
+                os.kill(int(pid_file.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            return
+        time.sleep(0.1)
+
+
+def test_escaped_descendant_cannot_hold_the_read_open(tmp_path):
+    path, pid_file = _escaper(tmp_path, 'print(json.dumps({"items": []}), flush=True)')
+    started = time.monotonic()
+    try:
+        with pytest.raises(ReadError, match="output still open"):
+            dp_sources.run_capped(py(path), timeout=5)
+        assert time.monotonic() - started < 2
+    finally:
+        _reap(pid_file)
+
+
+def test_escaped_descendant_does_not_stretch_the_timeout(tmp_path):
+    path, pid_file = _escaper(tmp_path, "import time; time.sleep(20)")
+    started = time.monotonic()
+    try:
+        with pytest.raises(ReadError, match="timed out after 0.3 s"):
+            dp_sources.run_capped(py(path), timeout=0.3)
+        assert time.monotonic() - started < 1.5
+    finally:
+        _reap(pid_file)
+
+
+def test_stdin_is_delivered(tmp_path):
+    echo = script(tmp_path, "import sys; data = sys.stdin.read(); print(len(data))", name="echo.py")
+    code, out, _ = dp_sources.run_capped(py(echo), timeout=10, stdin="x" * (512 * 1024))
+    assert code == 0 and out.strip() == str(512 * 1024)
+
+
 def test_command_runs_without_shell(tmp_path):
     marker = tmp_path / "pwned"
     s = section(tmp_path, kind="command", options={"argv": [sys.executable, "-c", "print('{\"items\": []}')",
@@ -196,6 +247,21 @@ def test_usage_every_provider_fails(tmp_path):
     s = section(tmp_path, kind="ai_usage", options={"providers": ["a"]})
     with pytest.raises(ReadError, match="a: exit 1, Error: no credential configured"):
         dp_sources.read_ai_usage(s, runner=runner, hermes="hermes")
+
+
+def test_usage_reason_shown_but_not_logged(tmp_path, caplog):
+    import logging
+    from day_panel import dp_config
+    from day_panel.dp_panel import Panel
+
+    data = {**usage("a"), "unavailable_reason": "SYNTHETIC_PROVIDER_OUTPUT"}
+    runner = FakeRunner(lambda argv: ok(data))
+    src = dp_config.parse({"sections": [{"id": "ai", "kind": "ai_usage", "options": {"providers": ["a"]}}]},
+                          tmp_path / "f.yaml")
+    with caplog.at_level(logging.WARNING, logger="hermes.plugins.day_panel"):
+        [view] = Panel(lambda s: dp_sources.read_ai_usage(s, runner=runner, hermes="hermes")).sections(src)
+    assert "SYNTHETIC_PROVIDER_OUTPUT" in view["error"]
+    assert caplog.records and not any("SYNTHETIC_PROVIDER_OUTPUT" in r.getMessage() for r in caplog.records)
 
 
 def test_usage_without_providers_uses_the_configured_one(tmp_path):
