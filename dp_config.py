@@ -240,8 +240,11 @@ KIND_OPTION_NAMES = {
 
 # ---------------------------------------------------------------- the file
 
-def definition_key(section_id: str, kind: str, options: Dict[str, Any], limits: Dict[str, int]) -> str:
-    blob = json.dumps({"kind": kind, "options": options, "limits": limits}, sort_keys=True, default=str)
+def definition_key(section_id: str, kind: str, options: Dict[str, Any], limits: Dict[str, int],
+                   base_dir: Optional[Path] = None) -> str:
+    """Everything that decides what a read returns: kind, options, limits and the folder commands run in."""
+    folder = str(Path(base_dir).resolve()) if base_dir is not None else ""
+    blob = json.dumps({"kind": kind, "options": options, "limits": limits, "dir": folder}, sort_keys=True, default=str)
     return f"{section_id}:{hashlib.sha256(blob.encode('utf-8')).hexdigest()[:16]}"
 
 
@@ -289,12 +292,11 @@ def parse(raw: Any, path: Path) -> Sources:
         for name, (default, lo, hi) in LIMITS.items():
             value = c.int_in(where, name, item[name], lo, hi) if name in item else default
             limits[name] = value if value is not None else default
-        opts_raw = item.get("options", {})
-        opts = c.mapping(where, "options", opts_raw) if opts_raw is not None else {}
+        opts = c.mapping(where, "options", item["options"]) if "options" in item else {}
         options = KIND_OPTIONS[kind](c, where, opts if opts is not None else {})
         sections.append(Section(id=sid, kind=kind, title=title.strip()[:120], enabled=enabled is True,
                                 options=options, base_dir=path.parent,
-                                key=definition_key(sid, kind, options, limits), **limits))
+                                key=definition_key(sid, kind, options, limits, path.parent), **limits))
     if c.errors:
         raise ConfigError(c.errors)
     return Sources(path=path, sections=sections)

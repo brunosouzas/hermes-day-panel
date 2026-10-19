@@ -97,6 +97,19 @@ def test_read_for_an_old_definition_is_discarded(tmp_path):
     assert view["items"] == again["items"] == [{"title": "new"}]
 
 
+def test_same_command_in_another_folder_is_another_section(tmp_path):
+    reader = Reader()
+    panel = Panel(reader)
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    one = dp_config.parse({"sections": [cmd(argv=["./src.py"])]}, tmp_path / "a" / "sources.yaml")
+    two = dp_config.parse({"sections": [cmd(argv=["./src.py"])]}, tmp_path / "b" / "sources.yaml")
+    assert one.sections[0].key != two.sections[0].key
+    panel.sections(one)
+    panel.sections(two)
+    assert len(reader.calls) == 2
+
+
 def test_failure_after_success(tmp_path):
     reader = Reader()
     reader.answers["cmd"] = {"items": [{"title": "1"}, {"title": "2"}, {"title": "3"}], "total": 3}

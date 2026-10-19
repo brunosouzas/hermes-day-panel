@@ -20,7 +20,11 @@ RESULT_MARK = "DAY_PANEL_RESULT "
 
 
 class ChildError(RuntimeError):
-    pass
+    """``str()`` is shown on the page; ``log`` (when set) replaces it in the log, without tool output."""
+
+    def __init__(self, message: str, log: Optional[str] = None):
+        super().__init__(message)
+        self.log = log
 
 
 def call(server: str, tool: str, args: Dict[str, Any], *, configured: Callable[[], Dict[str, Any]],
@@ -41,7 +45,7 @@ def call(server: str, tool: str, args: Dict[str, Any], *, configured: Callable[[
     except (TypeError, ValueError):
         return str(raw)
     if isinstance(answer, dict) and "error" in answer and "result" not in answer:
-        raise ChildError(f"the tool failed: {str(answer['error'])[:200]}")
+        raise ChildError(f"the tool failed: {str(answer['error'])[:200]}", log="the tool returned an error")
     if isinstance(answer, dict) and "result" in answer:
         value = answer["result"]
         return value if isinstance(value, str) else json.dumps(value)
@@ -81,6 +85,8 @@ def main(stdin=None, entry: Optional[Dict[str, Callable[..., Any]]] = None) -> i
         answer = {"ok": True, "text": text}
     except ChildError as exc:
         answer = {"ok": False, "error": str(exc)}
+        if exc.log:
+            answer["log"] = exc.log
     except ImportError:
         answer = {"ok": False, "error": "Hermes' MCP client could not be loaded"}
     except Exception as exc:  # report, never a traceback on stdout

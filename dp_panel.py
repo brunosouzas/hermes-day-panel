@@ -46,16 +46,17 @@ class Panel:
 
     def _read(self, section: Section) -> None:
         started_wall, started = self.wall(), self.clock()
-        good, error = None, None
+        good, error, logged = None, None, None
         try:
             good = self.reader(section)
         except ReadError as exc:
             error = str(exc) or "the read failed"
+            logged = exc.log_message or error
         except Exception as exc:  # a bug in a source must not take the page down
-            error = f"the read failed ({type(exc).__name__})"
+            error = logged = f"the read failed ({type(exc).__name__})"
         duration = int((self.clock() - started) * 1000)
         if error:
-            logger.warning("day-panel: section %s (%s) read failed: %s", section.id, section.kind, error)
+            logger.warning("day-panel: section %s (%s) read failed: %s", section.id, section.kind, logged)
         with self.lock:
             self.running.pop(section.key, None)
             if section.key not in self.current:

@@ -30,7 +30,7 @@ import {
   useQuery
 } from '@hermes/plugin-sdk'
 import { jsx, jsxs } from 'react/jsx-runtime'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 export const ID = 'day-panel'
 const PAGE_PATH = '/today'
@@ -192,45 +192,61 @@ export function MergeDialog ({ preview, busy = false, result = null, error = '',
   })
 }
 
-// ── container ──────────────────────────────────────────────────────────────
-function TodayPage () {
-  const [busy, setBusy] = useState({})
-  const [notice, setNotice] = useState('')
-  const [preview, setPreview] = useState(null)
-  const [mergeBusy, setMergeBusy] = useState(false)
-  const [mergeResult, setMergeResult] = useState(null)
-  const [mergeError, setMergeError] = useState('')
-  const query = useQuery({ queryKey: QUERY_KEY, queryFn: () => rest('/sections'), refetchInterval: POLL_MS })
-  const reload = () => queryClient.invalidateQueries({ queryKey: QUERY_KEY })
-
+// ── controller: the page's state and actions, without React (tests drive it directly) ──
+export function createController ({ restFn, reload, onChange }) {
+  const state = { busy: {}, notice: '', preview: null, mergeBusy: false, mergeResult: null, mergeError: '' }
+  const set = patch => { Object.assign(state, patch); onChange?.(state) }
   const withBusy = async (key, call) => {
-    setBusy(b => ({ ...b, [key]: true }))
-    setNotice('')
-    try { await call(); reload() } catch (e) { setNotice(errText(e)) } finally { setBusy(b => ({ ...b, [key]: false })) }
-  }
-  const handlers = {
-    onOpen: url => { void openExternalFn(url) },
-    onRefresh: id => withBusy(id, () => refreshSection(rest, id)),
-    onRefreshAll: () => withBusy('*', () => refreshAll(rest)),
-    onMerge: async (section, item) => {
-      setMergeResult(null); setMergeError(''); setNotice('')
-      try { setPreview(await previewMerge(rest, section.id, item)) } catch (e) { setNotice(errText(e)) }
+    set({ busy: { ...state.busy, [key]: true }, notice: '' })
+    try { await call(); await reload?.() } catch (e) { set({ notice: errText(e) }) } finally {
+      set({ busy: { ...state.busy, [key]: false } })
     }
   }
-  const onConfirm = async token => {
-    setMergeBusy(true); setMergeError('')
-    try { setMergeResult(await confirmMerge(rest, token)); reload() } catch (e) { setMergeError(errText(e)) } finally { setMergeBusy(false) }
+  return {
+    state,
+    refresh: id => withBusy(id, () => refreshSection(restFn, id)),
+    refreshAll: () => withBusy('*', () => refreshAll(restFn)),
+    async merge (section, item) {
+      set({ mergeResult: null, mergeError: '', notice: '' })
+      try { set({ preview: await previewMerge(restFn, section.id, item) }) } catch (e) { set({ notice: errText(e) }) }
+    },
+    async confirm (token) {
+      set({ mergeBusy: true, mergeError: '' })
+      try { set({ mergeResult: await confirmMerge(restFn, token) }); await reload?.() } catch (e) { set({ mergeError: errText(e) }) } finally {
+        set({ mergeBusy: false })
+      }
+    },
+    cancel: () => set({ preview: null, mergeResult: null, mergeError: '' })
   }
+}
+
+// ── container ──────────────────────────────────────────────────────────────
+export function TodayPage () {
+  const [, setTick] = useState(0)
+  const controller = useRef(null)
+  if (!controller.current) {
+    controller.current = createController({
+      restFn: (...args) => rest(...args),
+      reload: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+      onChange: () => setTick(n => n + 1)
+    })
+  }
+  const c = controller.current
+  const s = c.state
+  const query = useQuery({ queryKey: QUERY_KEY, queryFn: () => rest('/sections'), refetchInterval: POLL_MS })
 
   if (query.isError) return jsx(ErrorState, { title: 'Today is unavailable', description: errText(query.error) })
   if (query.isLoading) return jsx(GlyphSpinner, {})
   return jsx(ScrollArea, {
     children: jsxs('div', {
       children: [
-        jsx(TodayView, { data: query.data, busy, notice, ...handlers }),
+        jsx(TodayView, {
+          data: query.data, busy: s.busy, notice: s.notice,
+          onOpen: url => { void openExternalFn(url) }, onRefresh: c.refresh, onRefreshAll: c.refreshAll, onMerge: c.merge
+        }),
         jsx(MergeDialog, {
-          preview, busy: mergeBusy, result: mergeResult, error: mergeError, onConfirm,
-          onCancel: () => { setPreview(null); setMergeResult(null); setMergeError('') }
+          preview: s.preview, busy: s.mergeBusy, result: s.mergeResult, error: s.mergeError,
+          onConfirm: c.confirm, onCancel: c.cancel
         })
       ]
     })

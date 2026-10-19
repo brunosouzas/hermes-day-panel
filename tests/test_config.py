@@ -59,6 +59,8 @@ def test_unknown_option(tmp_path):
     ([{"id": "a", "kind": "ai_usage", "max_items": 51}], "max_items must be between 1 and 50"),
     ([{"id": "a", "kind": "ai_usage", "timeout_s": True}], "timeout_s must be a whole number"),
     ([{"id": "a", "kind": "ai_usage", "title": ""}], "title must be non-empty text"),
+    ([{"id": "a", "kind": "ai_usage", "options": None}], "options must be a mapping"),
+    ([{"id": "a", "kind": "github_prs", "options": None}], "options must be a mapping"),
     ([{"id": "a", "kind": "command"}], "option argv is required"),
     ([{"id": "a", "kind": "command", "options": {"argv": []}}], "argv must have between 1 and 50"),
     ([{"id": "a", "kind": "command", "options": {"argv": "date"}}], "argv must be a list"),

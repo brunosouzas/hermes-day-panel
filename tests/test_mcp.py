@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from day_panel import dp_mcp_child, dp_sources
+from day_panel import dp_config, dp_mcp_child, dp_sources
 from day_panel.dp_sources import ReadError
 from helpers import script, section
 
@@ -114,6 +114,36 @@ def test_list_key_not_a_list():
         dp_sources.map_mcp_result('{"other": []}', {"list_key": "tasks"}, 10)
     out = dp_sources.map_mcp_result('{"tasks": [{"title": "a"}]}', {"list_key": "tasks"}, 10)
     assert out["items"] == [{"title": "a"}]
+
+
+def test_non_text_values_become_text():
+    data = json.dumps([{"title": {"text": "Plan"}, "note": ["a", "b"], "n": 3}])
+    out = dp_sources.map_mcp_result(data, {"fields": {"title": "title", "detail": "note", "badge": "n"}}, 10)
+    assert out["items"] == [{"title": '{"text": "Plan"}', "detail": '["a", "b"]', "badge": "3"}]
+
+
+def test_tool_error_shown_but_not_logged(tmp_path, caplog):
+    import logging
+    from day_panel.dp_panel import Panel
+
+    class Failing(FakeHermes):
+        def dispatch(self, name, args):
+            return json.dumps({"error": "SYNTHETIC_PRIVATE_TOOL_RESULT"})
+    answer = run_child(Failing())
+    assert answer["ok"] is False and "SYNTHETIC_PRIVATE_TOOL_RESULT" in answer["error"] and answer["log"]
+    child = script(tmp_path, f"""
+        import sys
+        sys.stdin.read()
+        print("DAY_PANEL_RESULT " + {json.dumps(json.dumps(answer))})
+    """, name="child.py")
+    s = mcp_section(tmp_path)
+    reader = lambda sec: dp_sources.read_mcp_tool(
+        sec, call=lambda *a: dp_sources.call_mcp_child(*a, child=[sys.executable, str(child)]))
+    with caplog.at_level(logging.WARNING, logger="hermes.plugins.day_panel"):
+        [view] = Panel(reader).sections(dp_config.parse({"sections": [
+            {"id": "s", "kind": "mcp_tool", "options": {"server": "srv", "tool": "get_today"}}]}, tmp_path / "f.yaml"))
+    assert "SYNTHETIC_PRIVATE_TOOL_RESULT" in view["error"]
+    assert caplog.records and not any("SYNTHETIC_PRIVATE_TOOL_RESULT" in r.getMessage() for r in caplog.records)
 
 
 def test_element_without_title():

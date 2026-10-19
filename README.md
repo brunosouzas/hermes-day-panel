@@ -84,7 +84,7 @@ At most 20 sections. Anything else refuses the whole file: an unknown key, kind 
 |---|---|
 | `argv` | required; 1-50 strings, the program first |
 
-The program runs without a shell, with no standard input, in the sources file's folder, with the Hermes backend's environment. An element that is exactly `{python}` becomes the Python interpreter running Hermes; nothing else is expanded. It must print one JSON object, at most 256 KiB:
+The program runs without a shell, with no standard input, in the sources file's folder, with the Hermes backend's environment. An element that is exactly `{python}` becomes the Python interpreter running Hermes; nothing else is expanded. It runs in its own process group, and that group is ended when the program exits or its time runs out. Anything it started in the background stops with it, so do the whole read in the foreground. It must print one JSON object, at most 256 KiB:
 
 ```json
 {"items": [{"title": "Card 42 · Fix rounding", "url": "https://tracker.example/42",

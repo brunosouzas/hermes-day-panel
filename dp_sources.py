@@ -29,7 +29,12 @@ RESULT_MARK = "DAY_PANEL_RESULT "
 
 
 class ReadError(RuntimeError):
-    """A read failed; the message is safe to show and to log (it never carries source output)."""
+    """A read failed. ``str()`` is shown on the page; ``log_message`` is what the log gets, and it never
+    carries a source's output or a tool's result (it defaults to the shown message when that is safe)."""
+
+    def __init__(self, message: str, log_message: Optional[str] = None):
+        super().__init__(message)
+        self.log_message = log_message if log_message is not None else message
 
 
 # ---------------------------------------------------------------- running programs
@@ -40,7 +45,13 @@ Runner = Callable[..., Completed]
 
 def run_capped(argv: List[str], timeout: float, cwd: Optional[Path] = None, stdin: Optional[str] = None,
                cap: int = STDOUT_CAP, env: Optional[Dict[str, str]] = None) -> Completed:
-    """Run argv without a shell; kill its process group at the timeout or when stdout passes cap."""
+    """Run argv without a shell, all within one deadline: writing stdin, running, and draining output.
+
+    The program runs in its own process group. That group is killed at the deadline, when stdout
+    passes cap, and also once the program exits, so a descendant left holding the pipes can neither
+    keep the read open nor outlive it.
+    """
+    deadline = time.monotonic() + timeout
     try:
         proc = subprocess.Popen(argv, cwd=str(cwd) if cwd else None, env=env,
                                 stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
@@ -54,44 +65,63 @@ def run_capped(argv: List[str], timeout: float, cwd: Optional[Path] = None, stdi
     over = threading.Event()
 
     def pump_out() -> None:
-        while True:
-            chunk = proc.stdout.read(65536)
-            if not chunk:
-                return
-            if len(out) + len(chunk) > cap:
-                over.set()
-                _kill(proc)
-                return
-            out.extend(chunk)
+        try:
+            while True:
+                chunk = proc.stdout.read1(65536)
+                if not chunk:
+                    return
+                if len(out) + len(chunk) > cap:
+                    over.set()
+                    _kill(proc)
+                    return
+                out.extend(chunk)
+        except (OSError, ValueError):
+            return
 
     def pump_err() -> None:
-        while True:
-            chunk = proc.stderr.read(65536)
-            if not chunk:
-                return
-            err.extend(chunk)
-            del err[:-STDERR_KEEP]
+        try:
+            while True:
+                chunk = proc.stderr.read1(65536)
+                if not chunk:
+                    return
+                err.extend(chunk)
+                del err[:-STDERR_KEEP]
+        except (OSError, ValueError):
+            return
 
-    threads = [threading.Thread(target=pump_out, daemon=True), threading.Thread(target=pump_err, daemon=True)]
-    for t in threads:
-        t.start()
-    if stdin is not None:
+    def feed() -> None:
         try:
             proc.stdin.write(stdin.encode("utf-8"))
             proc.stdin.close()
+        except (OSError, ValueError):
+            pass
+
+    readers = [threading.Thread(target=pump_out, daemon=True), threading.Thread(target=pump_err, daemon=True)]
+    threads = readers + ([threading.Thread(target=feed, daemon=True)] if stdin is not None else [])
+    for t in threads:
+        t.start()
+    timed_out = False
+    try:
+        code = proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        timed_out = True
+    _kill(proc)  # the deadline passed, or the program exited: nothing of its group stays behind
+    if timed_out:
+        proc.wait()
+    for t in readers:
+        t.join(timeout=max(0.2, min(2.0, deadline - time.monotonic())))
+    for pipe in (proc.stdin, proc.stdout, proc.stderr):
+        try:
+            if pipe:
+                pipe.close()
         except OSError:
             pass
-    try:
-        code = proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _kill(proc)
-        proc.wait()
-        raise ReadError(f"timed out after {_seconds(timeout)} s") from None
-    finally:
-        for t in threads:
-            t.join(timeout=2)
+    if timed_out:
+        raise ReadError(f"timed out after {_seconds(timeout)} s")
     if over.is_set():
         raise ReadError(f"output larger than {cap // 1024} KiB")
+    if any(t.is_alive() for t in readers):
+        raise ReadError("output still open after the program exited (a process outside its group holds it)")
     return code, out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace")
 
 
@@ -268,7 +298,8 @@ def call_mcp_child(server: str, tool: str, args: Dict[str, Any], timeout: float,
                 break
             if answer.get("ok") is True and isinstance(answer.get("text"), str):
                 return answer["text"]
-            raise ReadError(str(answer.get("error") or "the MCP call failed")[:300])
+            shown = str(answer.get("error") or "the MCP call failed")[:300]
+            raise ReadError(shown, log_message=str(answer.get("log") or shown)[:300])
     raise ReadError(f"the MCP child exited with status {code}" + (f": {last_line(stderr)}" if last_line(stderr) else ""))
 
 
@@ -312,8 +343,8 @@ def map_mcp_result(text: str, options: Dict[str, Any], max_items: int) -> Dict[s
         item = {}
         for name, source_key in fields.items():
             value = element.get(source_key)
-            if value is not None and not isinstance(value, (dict, list)):
-                item[name] = value if isinstance(value, str) else json.dumps(value)
+            if value is not None:
+                item[name] = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
         if not clip(item.get("title")):
             skipped += 1
             continue

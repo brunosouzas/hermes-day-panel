@@ -89,6 +89,28 @@ def test_command_output_cap(tmp_path):
         dp_sources.read_command(s)
 
 
+def test_stdin_never_read_still_times_out(tmp_path):
+    sleeper = script(tmp_path, "import time; time.sleep(30)", name="sleeper.py")
+    started = time.monotonic()
+    with pytest.raises(ReadError, match="timed out"):
+        dp_sources.run_capped(py(sleeper), timeout=0.5, stdin="x" * (1024 * 1024))
+    assert time.monotonic() - started < 5
+
+
+def test_descendant_holding_the_pipes_is_killed(tmp_path):
+    marker = tmp_path / "descendant-alive"
+    s = cmd(tmp_path, f"""
+        import json, subprocess, sys
+        subprocess.Popen([sys.executable, "-c", "import time, pathlib; time.sleep(3); pathlib.Path({str(marker)!r}).write_text('x')"])
+        print(json.dumps({{"items": [{{"title": "done"}}]}}), flush=True)
+    """, timeout_s=10)
+    started = time.monotonic()
+    assert dp_sources.read_command(s)["items"] == [{"title": "done"}]
+    assert time.monotonic() - started < 2.5
+    time.sleep(3.5)
+    assert not marker.exists()
+
+
 def test_command_runs_without_shell(tmp_path):
     marker = tmp_path / "pwned"
     s = section(tmp_path, kind="command", options={"argv": [sys.executable, "-c", "print('{\"items\": []}')",

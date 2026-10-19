@@ -3,7 +3,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 const page = await import('../../desktop/plugin.js')
-const { TodayView, SectionCard, MergeDialog, refreshSection, previewMerge, confirmMerge } = page
+const { TodayView, SectionCard, MergeDialog, TodayPage, createController, refreshSection, previewMerge, confirmMerge } = page
+const sdk = await import('@hermes/plugin-sdk')
 
 function render (node) {
   if (node == null || node === false) return null
@@ -70,14 +71,50 @@ test('Item without a link', () => {
   assert.deepEqual(byRole(tree, 'title').map(textOf), ['plain', 'bad'])
 })
 
-test('refresh one section calls its route', async () => {
+// A fake backend: answers by path and records every call.
+function backend (answers = {}) {
   const calls = []
-  const rest = async (path, opts) => { calls.push([path, opts?.method]); return {} }
-  let refreshed = null
-  const tree = render(SectionCard({ section: prs(), onRefresh: id => { refreshed = id; return refreshSection(rest, id) } }))
+  const restFn = async (path, opts = {}) => {
+    calls.push([path, opts.method || 'GET', opts.body])
+    const answer = answers[path]
+    if (answer instanceof Error) throw answer
+    return typeof answer === 'function' ? answer() : (answer ?? {})
+  }
+  return { calls, restFn }
+}
+
+test('refresh one section calls its route', async () => {
+  const { calls, restFn } = backend()
+  let reloads = 0
+  const states = []
+  const c = createController({ restFn, reload: () => { reloads++ }, onChange: s => states.push({ ...s.busy }) })
+  const tree = render(SectionCard({ section: prs(), onRefresh: c.refresh }))
   await byAction(tree, 'refresh')[0].props.onClick()
-  assert.equal(refreshed, 'prs')
-  assert.deepEqual(calls, [['/sections/prs/refresh', 'POST']])
+  assert.deepEqual(calls.map(x => x.slice(0, 2)), [['/sections/prs/refresh', 'POST']])
+  assert.equal(reloads, 1) // the page's query is invalidated, so it shows the new read time
+  assert.deepEqual(states[0], { prs: true })
+  assert.deepEqual(c.state.busy, { prs: false })
+  const after = render(SectionCard({ section: prs({ read_at: '2026-10-19T13:05:00+00:00' }) }))
+  assert.match(textOf(byRole(after, 'read-at')), /^read 2026-10-19 \d\d:05$/)
+})
+
+test('page polls every 60 seconds and renders the sections it gets', () => {
+  sdk.recorded.queries.length = 0
+  sdk.queryResult.value = { data: data([prs()]), isLoading: false, isError: false }
+  const tree = render(TodayPage())
+  const [query] = sdk.recorded.queries
+  assert.equal(query.refetchInterval, 60000)
+  assert.deepEqual(query.queryKey, ['day-panel', 'sections'])
+  assert.equal(all(tree, n => n.type === 'section').length, 1)
+  sdk.queryResult.value = { data: undefined, isLoading: false, isError: false }
+})
+
+test('a failed refresh shows its error', async () => {
+  const { restFn } = backend({ '/sections/prs/refresh': new Error('{"detail":{"code":"not_found","message":"no such section"}}') })
+  const c = createController({ restFn, reload: () => {} })
+  await c.refresh('prs')
+  assert.equal(c.state.notice, 'no such section')
+  assert.equal(c.state.busy.prs, false)
 })
 
 test('merge control only when enabled', () => {
@@ -89,41 +126,48 @@ test('merge control only when enabled', () => {
 
 const previewData = { token: 'tok', repo: 'owner/repo', number: 7, title: 'T', base: 'main', head: 'abc1234def5678', method: 'squash' }
 
+const dialogOf = c => render(MergeDialog({ preview: c.state.preview, busy: c.state.mergeBusy, result: c.state.mergeResult,
+  error: c.state.mergeError, onConfirm: c.confirm, onCancel: c.cancel }))
+
 test('preview shown and cancelled', async () => {
-  const calls = []
-  const rest = async (path, opts) => { calls.push([path, opts?.body]); return previewData }
-  const section = prs({ merge: true })
-  let shown = null
-  const tree = render(SectionCard({ section, onMerge: async (s, item) => { shown = await previewMerge(rest, s.id, item) } }))
+  const { calls, restFn } = backend({ '/sections/prs/merge/preview': previewData })
+  const c = createController({ restFn, reload: () => {} })
+  const tree = render(SectionCard({ section: prs({ merge: true }), onMerge: c.merge }))
   await byAction(tree, 'merge')[0].props.onClick()
-  assert.deepEqual(calls, [['/sections/prs/merge/preview', { repo: 'owner/repo', number: 7 }]])
-  let cancelled = false
-  let confirmed = false
-  const dialog = render(MergeDialog({ preview: shown, onCancel: () => { cancelled = true }, onConfirm: () => { confirmed = true } }))
+  assert.deepEqual(calls, [['/sections/prs/merge/preview', 'POST', { repo: 'owner/repo', number: 7 }]])
+  const dialog = dialogOf(c)
   assert.match(textOf(byRole(dialog, 'merge-target')), /owner\/repo#7/)
   assert.match(textOf(byRole(dialog, 'merge-details')), /into main · squash/)
   byAction(dialog, 'merge-cancel')[0].props.onClick()
-  assert.equal(cancelled, true)
-  assert.equal(confirmed, false)
-  assert.equal(calls.length, 1)
+  assert.equal(dialogOf(c), null) // the dialog is gone
+  assert.equal(calls.length, 1) // and no confirm was sent
 })
 
 test('confirm sends the token and shows merged', async () => {
-  const calls = []
-  const rest = async (path, opts) => { calls.push([path, opts?.body]); return { merged: true } }
-  let result = null
-  const dialog = render(MergeDialog({ preview: previewData, onConfirm: async token => { result = await confirmMerge(rest, token) } }))
-  await byAction(dialog, 'merge-confirm')[0].props.onClick()
-  assert.deepEqual(calls, [['/merge/confirm', { token: 'tok' }]])
-  const after = render(MergeDialog({ preview: previewData, result }))
+  const { calls, restFn } = backend({ '/sections/prs/merge/preview': previewData, '/merge/confirm': { merged: true } })
+  let reloads = 0
+  const c = createController({ restFn, reload: () => { reloads++ } })
+  await c.merge(prs({ merge: true }), pr(7))
+  await byAction(dialogOf(c), 'merge-confirm')[0].props.onClick()
+  assert.deepEqual(calls[1], ['/merge/confirm', 'POST', { token: 'tok' }])
+  const after = dialogOf(c)
   assert.equal(textOf(byRole(after, 'merge-result')), 'Merged.')
   assert.equal(byAction(after, 'merge-confirm').length, 0)
+  assert.equal(reloads, 1)
 })
 
-test('merge error shown', () => {
-  const dialog = render(MergeDialog({ preview: previewData, error: 'gh exited with status 1: Head branch was modified' }))
+test('merge error shown', async () => {
+  const { restFn } = backend({
+    '/sections/prs/merge/preview': previewData,
+    '/merge/confirm': new Error('{"detail":{"code":"merge_failed","message":"gh exited with status 1: Head branch was modified"}}')
+  })
+  const c = createController({ restFn, reload: () => {} })
+  await c.merge(prs({ merge: true }), pr(7))
+  await c.confirm('tok')
+  const dialog = dialogOf(c)
   assert.match(textOf(byRole(dialog, 'merge-error')), /Head branch was modified/)
   assert.equal(byAction(dialog, 'merge-confirm').length, 0)
+  assert.equal(c.state.mergeBusy, false)
 })
 
 test('register adds the page, the nav entry and the palette command', () => {

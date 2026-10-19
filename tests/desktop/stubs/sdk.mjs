@@ -11,5 +11,8 @@ export const PALETTE_AREA = 'palette'
 export const ROUTES_AREA = 'routes'
 export const SIDEBAR_NAV_AREA = 'sidebar-nav'
 export const host = { navigate: () => {} }
-export const queryClient = { invalidateQueries: () => {} }
-export const useQuery = () => ({ data: undefined, isLoading: false, isError: false })
+// useQuery and queryClient record their calls; tests set queryResult.value to what useQuery returns.
+export const recorded = { queries: [], invalidations: [] }
+export const queryResult = { value: { data: undefined, isLoading: false, isError: false } }
+export const queryClient = { invalidateQueries: opts => { recorded.invalidations.push(opts) } }
+export const useQuery = opts => { recorded.queries.push(opts); return queryResult.value }
