@@ -1,0 +1,8 @@
+{
+  "name": "day-panel",
+  "label": "Today",
+  "description": "Today page: your sections from pluggable, read-only sources.",
+  "icon": "calendar",
+  "version": "0.1.0",
+  "api": "plugin_api.py"
+}
