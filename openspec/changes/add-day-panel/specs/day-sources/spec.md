@@ -106,9 +106,19 @@ A `command` section SHALL run `options.argv` without a shell, with no standard i
 - **WHEN** the section is read
 - **THEN** the section is `error` with a message containing the exit status and `boom`
 
+### Requirement: Command environment
+
+A `command` program SHALL run with the sources file's folder as its working directory, so `argv` may name files relative to it. An `argv` element that is exactly `{python}` SHALL be replaced by the path of the Python interpreter running Hermes. No other placeholder is expanded, and the environment is the Hermes backend's own.
+
+#### Scenario: Relative script with Hermes' Python
+
+- **GIVEN** `argv: ["{python}", source.py]` and a `source.py` next to the sources file that prints `{"items": []}`
+- **WHEN** the section is read
+- **THEN** the script runs with Hermes' Python in that folder and the read succeeds with no items
+
 ### Requirement: Command output limits
 
-A `command` read SHALL fail when the program runs past `timeout_s` (it is killed), writes more than 256 KiB to standard output, or prints something that is not a JSON object with an `items` list. An item that is not an object or has no text `title` is dropped.
+A `command` read SHALL fail when the program runs past `timeout_s` (it is killed), writes more than 256 KiB to standard output, or prints something that is not a JSON object with an `items` list. An item that is not an object or has no non-empty text `title` is dropped; an optional item field that is not text is dropped; a `total` that is not a whole number of 0 or more, or a `note` that is not text, is ignored.
 
 #### Scenario: Timeout
 
@@ -121,6 +131,12 @@ A `command` read SHALL fail when the program runs past `timeout_s` (it is killed
 - **GIVEN** a command that prints `hello`
 - **WHEN** the section is read
 - **THEN** the read fails saying the output is not the expected JSON
+
+#### Scenario: Malformed optional fields
+
+- **GIVEN** a command that prints `{"items": [{"title": "x", "detail": {}}, {"title": 3}], "total": "many", "note": []}`
+- **WHEN** the section is read
+- **THEN** the read succeeds with one item `x` without a detail, `total` 1 and no note
 
 ### Requirement: GitHub pull requests source
 
@@ -162,13 +178,19 @@ An `mcp_tool` section SHALL call `options.tool` (required text) on the Hermes MC
 
 ### Requirement: MCP tool JSON extraction
 
-The `mcp_tool` source SHALL decode the tool's text result as JSON when the whole text is JSON; otherwise it SHALL decode from the first line that starts with `[` or `{`. A list is the item list. An object needs `options.list_key` naming a list inside it. Text with no decodable JSON gives one item per non-empty line, up to `max_items`.
+The `mcp_tool` source SHALL decode the tool's text result as JSON when the whole text is JSON; otherwise it SHALL decode from the first line that starts with `[` or `{`. A list is the item list. An object needs `options.list_key` naming a list inside it. JSON `null` gives no items; another scalar gives one item with the value as its title. Text with no decodable JSON gives one item per non-empty line.
 
 #### Scenario: Text after a heading
 
 - **GIVEN** a tool result `Tasks for 2026-10-19:\n[{"title": "Study", "note": "SOLID"}]`
 - **WHEN** the section is read with `fields: {title: title, detail: note}`
 - **THEN** there is one item, title `Study`, detail `SOLID`
+
+#### Scenario: Scalar result
+
+- **GIVEN** a tool result `"nothing scheduled"` (a JSON string)
+- **WHEN** the section is read
+- **THEN** there is one item titled `nothing scheduled`
 
 #### Scenario: Object without list key
 
@@ -194,7 +216,7 @@ The `mcp_tool` source SHALL decode the tool's text result as JSON when the whole
 
 ### Requirement: AI usage source
 
-An `ai_usage` section SHALL run `hermes usage --json --provider <name>` for each name in `providers` (none listed: one run without `--provider`), each within `timeout_s`. Each limit window becomes an item: provider title and window label, `NN% used`, and the reset time. A window at or above `warn_percent` gets the badge `high`. A provider that fails is named in the note.
+An `ai_usage` section SHALL run `hermes usage --json --provider <name>` for each name in `providers`, in order (none listed: one run without `--provider`); `timeout_s` bounds the whole section. Each limit window becomes an item: provider title and window label, `NN% used`, the reset time; the badge `high` at or above `warn_percent`. Providers that fail or are not reached in time are named in the note.
 
 #### Scenario: Two providers
 
@@ -207,6 +229,12 @@ An `ai_usage` section SHALL run `hermes usage --json --provider <name>` for each
 - **GIVEN** providers `a` and `b`, where `hermes usage` for `b` exits with status 1
 - **WHEN** the section is read
 - **THEN** `a`'s windows are items and the note says provider `b` could not be read
+
+#### Scenario: Section deadline
+
+- **GIVEN** providers `a` and `b` and `timeout_s: 5`, where `a` takes the whole 5 seconds
+- **WHEN** the section is read
+- **THEN** `a` is stopped, `b` is not run, and the read fails naming both as not read in time
 
 #### Scenario: Every provider fails
 

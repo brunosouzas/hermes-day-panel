@@ -3,7 +3,7 @@ schema: spec-driven
 
 context: |
   hermes-day-panel is a public Hermes Agent plugin (Python, standard library
-  only, plus a Desktop page in JavaScript). Nothing personal belongs in code:
+  plus the PyYAML that Hermes ships, and a Desktop page in JavaScript). Nothing personal belongs in code:
   sections, commands, MCP servers and providers come from the sources file.
   Source output is untrusted input. Tests run offline with pytest.
 

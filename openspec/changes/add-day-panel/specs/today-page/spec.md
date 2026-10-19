@@ -80,7 +80,7 @@ A merge preview for one item SHALL read the pull request now through `gh` and re
 
 ### Requirement: Merge confirmation
 
-Confirming SHALL first consume the token, then re-read the sources file and check that the section still exists with merge enabled and the same method; then run `gh pr merge` with that method and `--match-head-commit <previewed head>`, without deleting the branch. Any failed check answers 409 without running `gh`. One merge runs at a time; a second confirm meanwhile answers 409.
+Confirming SHALL consume the token, re-read the sources file and check that the section still exists, is enabled, is `github_prs`, has merge enabled and the same method; then run `gh pr merge` with that method and `--match-head-commit <previewed head>`, keeping the branch. Any failed check answers 409 without running `gh` (409, not the 404 of refresh routes). One merge runs at a time; another confirm meanwhile gets 409.
 
 #### Scenario: Confirmed merge
 
@@ -98,6 +98,12 @@ Confirming SHALL first consume the token, then re-read the sources file and chec
 
 - **GIVEN** a preview older than 120 seconds
 - **WHEN** it is confirmed
+- **THEN** the answer is 409 and `gh` does not run
+
+#### Scenario: Section disabled after the preview
+
+- **GIVEN** a preview, after which the sources file sets `enabled: false` for that section
+- **WHEN** the user confirms
 - **THEN** the answer is 409 and `gh` does not run
 
 #### Scenario: Merge turned off after the preview
