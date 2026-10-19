@@ -1,0 +1,19 @@
+name: day-panel
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+description: "A Today page in Hermes Desktop built from sources you list in a YAML file: any program that prints JSON, your open GitHub pull requests (merge after a preview and a confirmation, off by default), a read-only MCP tool, and your AI provider limit windows. Read-only, no model calls."
+author: "Bruno Souza (@brunosouzas)"
+license: MIT
+homepage: https://github.com/brunosouzas/hermes-day-panel
+tags: [dashboard, today, desktop, github, mcp, usage]
+requires_hermes: ">=0.22.2"
+platforms: [macos, linux]
+provides_tools: []
+provides_hooks: []
+config_schema:
+  sources_file:
+    type: str
+    default: ""
+    label: Sources file
+    description: "YAML file listing the page's sections. Empty = $HERMES_HOME/day-panel/sources.yaml. Edit it by hand or by asking Hermes; `hermes day check` validates it."
