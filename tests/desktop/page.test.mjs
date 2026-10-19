@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 const page = await import('../../desktop/plugin.js')
-const { TodayView, SectionCard, MergeDialog, TodayPage, createController, refreshSection, previewMerge, confirmMerge } = page
+const { TodayView, SectionCard, MergeDialog, TodayPage, createController, refreshSection, previewMerge, confirmMerge, shortTime } = page
 const sdk = await import('@hermes/plugin-sdk')
 
 function render (node) {
@@ -51,6 +51,27 @@ test('Sections shown', () => {
   assert.equal(textOf(byRole(sections[1], 'status')), 'error')
 })
 
+test('short times read naturally, past and future', () => {
+  const now = new Date(2026, 9, 19, 15, 0).getTime()
+  const at = (d, h, m) => new Date(2026, 9, d, h, m).toISOString()
+  assert.equal(shortTime(at(19, 15, 0), now), 'just now')
+  assert.equal(shortTime(at(19, 14, 48), now), '12 min ago')
+  assert.equal(shortTime(at(19, 15, 40), now), 'in 40 min')
+  assert.equal(shortTime(at(19, 18, 10), now), 'in 3 h')
+  assert.equal(shortTime(at(19, 9, 5), now), '09:05')
+  assert.equal(shortTime(at(16, 17, 28), now), '16 Oct 17:28')
+  assert.equal(shortTime('not a date', now), 'not a date')
+})
+
+test('status shown as a dot, with a word only when it is not ok', () => {
+  const ok = render(SectionCard({ section: prs() }))
+  assert.equal(byRole(ok, 'status').length, 0)
+  assert.equal(byRole(ok, 'status-dot')[0].props.tone, 'good')
+  const stale = render(SectionCard({ section: prs({ status: 'stale' }) }))
+  assert.equal(textOf(byRole(stale, 'status')), 'stale')
+  assert.equal(byRole(stale, 'status-dot')[0].props.tone, 'warn')
+})
+
 test('Markup in source text', () => {
   const evil = '<img src=x onerror=alert(1)>'
   const tree = render(SectionCard({ section: prs({ items: [{ title: evil, detail: evil }] }) }))
@@ -94,8 +115,11 @@ test('refresh one section calls its route', async () => {
   assert.equal(reloads, 1) // the page's query is invalidated, so it shows the new read time
   assert.deepEqual(states[0], { prs: true })
   assert.deepEqual(c.state.busy, { prs: false })
-  const after = render(SectionCard({ section: prs({ read_at: '2026-10-19T13:05:00+00:00' }) }))
-  assert.match(textOf(byRole(after, 'read-at')), /^read 2026-10-19 \d\d:05$/)
+  const readAt = '2026-10-19T13:05:00+00:00'
+  const after = render(SectionCard({ section: prs({ read_at: readAt }), now: Date.parse(readAt) + 3 * 60000 }))
+  const [shown] = byRole(after, 'read-at')
+  assert.equal(textOf([shown]), '3 min ago')
+  assert.match(shown.props.title, /^read 2026-10-19 \d\d:05$/) // the full time stays on hover
 })
 
 test('page polls every 60 seconds and renders the sections it gets', () => {

@@ -2,6 +2,8 @@
 const tag = name => Object.assign(props => ({ type: name, props }), { displayName: name })
 export const Badge = tag('Badge')
 export const Button = tag('Button')
+export const Codicon = tag('Codicon')
+export const StatusDot = tag('StatusDot')
 export const EmptyState = tag('EmptyState')
 export const ErrorState = tag('ErrorState')
 export const GlyphSpinner = tag('GlyphSpinner')
