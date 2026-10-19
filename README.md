@@ -133,7 +133,20 @@ For each provider, in order, the plugin runs `hermes usage --json --provider <na
 
 ## The page
 
-Sections appear in file order, with their status: **ok**, **stale** (the latest read failed; the last good items are still shown with the new error) or **error** (no good read yet). Each section also shows when it was read. The page asks for the sections when it opens and every 60 seconds; only sections older than their `refresh_minutes` are read again. **Refresh** on a section, or **Refresh all**, reads now. At most four reads run at once, and a refresh for a section that is already being read waits for that read. Results live in memory: after a restart, the first page load reads every section.
+Sections appear as cards in file order, in as many columns as the window fits. Each card shows its status as a dot: green for **ok**, amber for **stale** (the latest read failed; the last good items are still shown with the new error), red for **error** (no good read yet); stale and error are also written next to the title. Each card shows how long ago it was read (the exact time on hover), and times on items read the same way: "12 min ago", "in 3 h", "16 Oct 17:28". The page asks for the sections when it opens and every 60 seconds; only sections older than their `refresh_minutes` are read again. **Refresh** on a section, or **Refresh all**, reads now. At most four reads run at once, and a refresh for a section that is already being read waits for that read. Results live in memory: after a restart, the first page load reads every section.
+
+### Look and theme
+
+The page uses the Desktop's own components and colour tokens, so it follows the theme you pick (light, dark, or any custom theme). To adjust it without touching the plugin, override these variables on `.day-panel-page` in your theme's custom CSS:
+
+| Variable | What it sets | Default |
+|---|---|---|
+| `--dp-columns` | Minimum card width per column | `minmax(360px, 1fr)` |
+| `--dp-radius` | Card corner radius | the theme's `--radius-lg` |
+| `--dp-link` | Link colour | the theme's primary colour |
+| `--dp-border`, `--dp-card`, `--dp-muted`, `--dp-danger` | Card border and fill, secondary text, errors | the theme's matching tokens |
+
+For example, `.day-panel-page { --dp-columns: minmax(480px, 1fr); }` gives wider cards and fewer columns.
 
 ## Command line
 
