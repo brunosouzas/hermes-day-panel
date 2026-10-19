@@ -288,11 +288,14 @@ const STYLE = `
 `
 
 function ensureStyles () {
-  if (typeof document === 'undefined' || document.getElementById(`${ID}-style`)) return
-  const el = document.createElement('style')
-  el.id = `${ID}-style`
-  el.textContent = STYLE
-  document.head.appendChild(el)
+  if (typeof document === 'undefined') return
+  let el = document.getElementById(`${ID}-style`)
+  if (!el) {
+    el = document.createElement('style')
+    el.id = `${ID}-style`
+    document.head.appendChild(el)
+  }
+  el.textContent = STYLE // always the current rules: Desktop hot-reloads plugin.js without a page reload
 }
 
 export default {
