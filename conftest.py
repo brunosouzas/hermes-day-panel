@@ -10,6 +10,14 @@ REPO_ROOT = Path(__file__).resolve().parent
 collect_ignore = [p.name for p in REPO_ROOT.glob("*.py") if p.name != "conftest.py"] + ["dashboard", "desktop"]
 
 
+def _hermes_yaml() -> None:
+    """Outside Hermes, stand in for core's ``hermes_yaml`` (ruamel.yaml, as in core)."""
+    try:
+        import hermes_yaml  # noqa: F401  # type: ignore
+    except ImportError:
+        sys.path.insert(0, str(REPO_ROOT / "tests" / "stubs"))
+
+
 def _load() -> None:
     if "day_panel" in sys.modules:
         return
@@ -20,4 +28,5 @@ def _load() -> None:
     spec.loader.exec_module(module)
 
 
+_hermes_yaml()
 _load()
