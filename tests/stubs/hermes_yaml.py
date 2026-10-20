@@ -7,6 +7,7 @@ duplicate keys refused. Inside Hermes the real module is imported instead.
 from typing import IO, Any
 
 from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError  # noqa: F401  (core exposes it under the same name)
 
 
 def safe_load(stream: "str | bytes | IO[str] | IO[bytes]") -> Any:

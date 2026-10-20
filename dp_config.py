@@ -15,9 +15,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-# Hermes core's YAML policy (ruamel.yaml, YAML 1.1, duplicate keys refused): the plugin adds no dependency.
+# Hermes core's YAML policy (YAML 1.1, duplicate keys refused). The plugin imports no YAML library itself:
+# the error type comes through hermes_yaml too.
 import hermes_yaml  # type: ignore
-from ruamel.yaml.error import YAMLError
 
 KINDS = ("command", "github_prs", "mcp_tool", "ai_usage")
 MAX_SECTIONS = 20
@@ -329,7 +329,8 @@ def load(path: Path) -> Sources:
         raise ConfigError([f"sources file unreadable: {path}: {exc.strerror or exc}"]) from None
     try:
         raw = hermes_yaml.safe_load(text)
-    except YAMLError as exc:
+    # ruamel asserts on a %YAML directive other than 1.1/1.2; that is a broken file too, not a crash.
+    except (hermes_yaml.YAMLError, AssertionError) as exc:
         mark = getattr(exc, "problem_mark", None)
         where = f" (line {mark.line + 1})" if mark is not None else ""
         raise ConfigError([f"{path.name} is not valid YAML{where}"]) from None

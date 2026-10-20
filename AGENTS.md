@@ -8,7 +8,7 @@ A public Hermes Agent plugin: a **Today** page in Hermes Desktop built from sect
 
 Stack: Python, pytest, Hermes plugin API, FastAPI (Hermes dashboard backend), Hermes Desktop plugin SDK (plain ESM)
 
-- Plugin code (`__init__.py`, `dp_*.py`) runs inside Hermes and uses the standard library plus core's `hermes_yaml` (and its `ruamel.yaml` error type). Never import PyYAML in plugin code, and never add a runtime dependency. Outside Hermes, the root `conftest.py` puts `tests/stubs/hermes_yaml.py` in its place.
+- Plugin code (`__init__.py`, `dp_*.py`) runs inside Hermes and uses the standard library plus core's `hermes_yaml`. Import no YAML library directly (catch `hermes_yaml.YAMLError`), and never add a runtime dependency. Outside Hermes, the root `conftest.py` puts `tests/stubs/hermes_yaml.py` in its place.
 - `dashboard/plugin_api.py` is mounted by Hermes at `/api/plugins/day-panel/`; it imports the plugin modules through its own package loader.
 - `dp_mcp_child.py` runs as a separate process (Hermes' Python with `-I`, the backend's `sys.path` passed in) so an MCP call can be killed at its timeout.
 - `desktop/plugin.js` is uncompiled ESM: `jsx()` calls, not JSX syntax; only `@hermes/plugin-sdk`, `react` and `react/jsx-runtime` resolve. Views stay pure functions of their props so `tests/desktop/` can render them in Node.

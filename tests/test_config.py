@@ -116,6 +116,10 @@ def test_yaml_follows_the_hermes_policy(tmp_path):
         dp_config.load(path)
     path.write_text("sections:\n  - id: c\n    kind: ai_usage\n    enabled: n\n", encoding="utf-8")
     assert dp_config.load(path).sections[0].enabled is False
+    for version in ("1.0", "1.3"):
+        path.write_text(f"%YAML {version}\n---\nsections: []\n", encoding="utf-8")
+        with pytest.raises(dp_config.ConfigError, match="not valid YAML"):
+            dp_config.load(path)
 
 
 def test_definition_key_changes_with_the_definition(tmp_path):
