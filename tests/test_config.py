@@ -109,6 +109,15 @@ def test_section_limit_and_top_level(tmp_path):
         dp_config.load(path)
 
 
+def test_yaml_follows_the_hermes_policy(tmp_path):
+    path = tmp_path / "x.yaml"
+    path.write_text("sections: []\nsections: []\n", encoding="utf-8")
+    with pytest.raises(dp_config.ConfigError, match=r"x\.yaml is not valid YAML \(line 2\)"):
+        dp_config.load(path)
+    path.write_text("sections:\n  - id: c\n    kind: ai_usage\n    enabled: n\n", encoding="utf-8")
+    assert dp_config.load(path).sections[0].enabled is False
+
+
 def test_definition_key_changes_with_the_definition(tmp_path):
     a = dp_config.parse({"sections": [{"id": "c", "kind": "command", "options": {"argv": ["a"]}}]}, tmp_path / "f")
     b = dp_config.parse({"sections": [{"id": "c", "kind": "command", "options": {"argv": ["b"]}}]}, tmp_path / "f")

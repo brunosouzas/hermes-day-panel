@@ -15,7 +15,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-import yaml
+# Hermes core's YAML policy (ruamel.yaml, YAML 1.1, duplicate keys refused): the plugin adds no dependency.
+import hermes_yaml  # type: ignore
+from ruamel.yaml.error import YAMLError
 
 KINDS = ("command", "github_prs", "mcp_tool", "ai_usage")
 MAX_SECTIONS = 20
@@ -326,8 +328,8 @@ def load(path: Path) -> Sources:
     except OSError as exc:
         raise ConfigError([f"sources file unreadable: {path}: {exc.strerror or exc}"]) from None
     try:
-        raw = yaml.safe_load(text)
-    except yaml.YAMLError as exc:
+        raw = hermes_yaml.safe_load(text)
+    except YAMLError as exc:
         mark = getattr(exc, "problem_mark", None)
         where = f" (line {mark.line + 1})" if mark is not None else ""
         raise ConfigError([f"{path.name} is not valid YAML{where}"]) from None

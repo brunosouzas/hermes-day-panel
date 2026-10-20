@@ -209,12 +209,12 @@ hermes day show --json    # the same, as JSON
 
 ## Compatibility
 
-`mcp_tool` uses three Hermes internals, because Hermes has no public plugin API yet for calling an MCP tool or reading its `readOnlyHint`: `tools.mcp_tool_discovery.discover_mcp_tools`, `tools.mcp_tool_handlers._tool_is_read_only` and `tools.mcp_tool_schema.mcp_prefixed_tool_name`. `hermes plugins validate` lists them as a warning (catalog rule 9). If a Hermes release moves them, `mcp_tool` sections show an error and the other kinds keep working. Tested with Hermes 0.22.2.
+`mcp_tool` uses three Hermes internals, because Hermes has no public plugin API yet for calling an MCP tool or reading its `readOnlyHint`: `tools.mcp_tool_discovery.discover_mcp_tools`, `tools.mcp_tool_handlers._tool_is_read_only` and `tools.mcp_tool_schema.mcp_prefixed_tool_name`. `hermes plugins validate` lists them as a warning (catalog rule 9). If a Hermes release moves them, `mcp_tool` sections show an error and the other kinds keep working. The sources file is read with core's `hermes_yaml.safe_load` (the YAML policy Hermes uses for its own config: duplicate keys are refused), so the plugin declares no YAML library; `hermes plugins validate` lists that import under rule 9 too. Tested with Hermes 0.22.2.
 
 ## Development
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install pytest pyyaml fastapi httpx
+python3 -m venv .venv && .venv/bin/pip install pytest "ruamel.yaml>=0.18,<0.19" pyyaml fastapi httpx
 .venv/bin/python -m pytest -q
 node --import ./tests/desktop/register.mjs --test tests/desktop/
 rm -rf tests/__pycache__ && hermes plugins validate . --install-deps
