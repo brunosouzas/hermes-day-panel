@@ -329,8 +329,10 @@ def load(path: Path) -> Sources:
         raise ConfigError([f"sources file unreadable: {path}: {exc.strerror or exc}"]) from None
     try:
         raw = hermes_yaml.safe_load(text)
-    # ruamel asserts on a %YAML directive other than 1.1/1.2; that is a broken file too, not a crash.
-    except (hermes_yaml.YAMLError, AssertionError) as exc:
+    # Any failure to read the text is a broken file, not a crash: besides YAMLError, ruamel raises
+    # AssertionError (%YAML 1.0/1.3), ValueError (2020-02-30, !!int abc), KeyError (!!bool maybe)
+    # and, in the pure parser, RecursionError (very deep nesting).
+    except Exception as exc:
         mark = getattr(exc, "problem_mark", None)
         where = f" (line {mark.line + 1})" if mark is not None else ""
         raise ConfigError([f"{path.name} is not valid YAML{where}"]) from None
