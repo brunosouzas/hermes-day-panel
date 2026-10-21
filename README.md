@@ -175,7 +175,8 @@ The page uses the Desktop's own components and colour tokens, so it follows the 
 
 | Variable | What it sets | Default |
 |---|---|---|
-| `--dp-columns` | Minimum card width per column | `minmax(360px, 1fr)` |
+| `--dp-columns` | Minimum card width per column | `minmax(440px, 1fr)` |
+| `--dp-max-width` | Width the page stops growing at; the cards fill the window by default | `none` |
 | `--dp-radius` | Card corner radius | the theme's `--radius-lg` |
 | `--dp-link` | Link colour | the theme's primary colour |
 | `--dp-border`, `--dp-card`, `--dp-muted`, `--dp-danger` | Card border and fill, secondary text, errors and `bad` | the theme's matching tokens |

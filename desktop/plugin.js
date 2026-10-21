@@ -362,15 +362,16 @@ const STYLE = `
   --dp-warn:var(--ui-yellow,#c08532);
   --dp-hover:color-mix(in srgb,var(--dp-fg) 5%,transparent);
   --dp-radius:var(--radius-lg,10px);
-  --dp-columns:minmax(360px,1fr);
-  display:flex;flex-direction:column;gap:16px;padding:20px 24px 32px;max-width:1280px;color:var(--dp-fg)
+  --dp-columns:minmax(440px,1fr);
+  --dp-max-width:none;
+  display:flex;flex-direction:column;gap:16px;padding:20px 24px 32px;max-width:var(--dp-max-width);color:var(--dp-fg)
 }
 .${ID}-toolbar{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .${ID}-toolbar h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em}
 .${ID}-date{color:var(--dp-muted);font-size:13px}
 .${ID}-spacer{flex:1}
 .${ID}-notice{color:var(--dp-danger);font-size:12px}
-.${ID}-grid{display:grid;grid-template-columns:repeat(auto-fill,var(--dp-columns));gap:14px;align-items:start}
+.${ID}-grid{display:grid;grid-template-columns:repeat(auto-fit,var(--dp-columns));gap:14px;align-items:start}
 .${ID}-section{background:var(--dp-card);border:1px solid var(--dp-border);border-radius:var(--dp-radius);padding:10px 8px 8px;display:flex;flex-direction:column;gap:4px;min-width:0}
 .${ID}-section[data-status="error"]{border-color:color-mix(in srgb,var(--dp-danger) 45%,var(--dp-border))}
 .${ID}-head{display:flex;align-items:center;gap:8px;padding:0 6px 4px;min-height:26px}
