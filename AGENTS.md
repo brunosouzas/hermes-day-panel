@@ -10,7 +10,7 @@ Stack: Python, pytest, Hermes plugin API, FastAPI (Hermes dashboard backend), He
 Delivery: D this Mac
 Integration branch: `main`
 Trivial: none
-Deliver and verify: `hermes plugins update day-panel`; a gateway restart only with Bruno around; verify with `hermes plugins list` (enabled, new revision) and `hermes day check`
+Deliver and verify: `hermes plugins update day-panel`; a gateway restart only with Bruno around; verify with `hermes plugins check-updates` (Current is the merge commit, up to date) and `hermes plugins list` (enabled) and `hermes day check`
 
 - Plugin code (`__init__.py`, `dp_*.py`) runs inside Hermes and uses the standard library plus core's `hermes_yaml`. Import no YAML library directly, and never add a runtime dependency. Any exception from `hermes_yaml.safe_load` means "not valid YAML" (ruamel raises more than `YAMLError`). Outside Hermes, the root `conftest.py` puts `tests/stubs/hermes_yaml.py` in its place.
 - `dashboard/plugin_api.py` is mounted by Hermes at `/api/plugins/day-panel/`; it imports the plugin modules through its own package loader.
