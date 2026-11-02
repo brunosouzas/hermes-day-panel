@@ -216,11 +216,17 @@ hermes day show --json    # the same, as JSON
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest "ruamel.yaml>=0.18,<0.19" pyyaml fastapi httpx
 .venv/bin/python -m pytest -q
-node --import ./tests/desktop/register.mjs --test tests/desktop/
+node --import ./tests/desktop/register.mjs --test 'tests/desktop/**/*.test.mjs'
 rm -rf tests/__pycache__ && hermes plugins validate . --install-deps
 ```
 
+GitHub Actions runs the Python and the page tests on every pull request (`.github/workflows/ci.yml`, Python 3.12).
+
 Tests never use the network. `gh`, `hermes usage` and Hermes' MCP client are replaced by fakes, and the command tests run small Python scripts. Behaviour is specified in `openspec/specs/`.
+
+## Releases
+
+Versions follow [SemVer](https://semver.org/). [release-please](https://github.com/googleapis/release-please) reads the [Conventional Commits](https://www.conventionalcommits.org/) messages of the commits that reach `main` (with a squash merge, the squash commit's message): `feat:` makes a minor version, `fix:`, `perf:` and `revert:` a patch, and other types release nothing. It keeps a release pull request with the next version in `pyproject.toml`, `plugin.yaml` and `dashboard/manifest.json` and its `CHANGELOG.md` entry; merging it creates the tag `vX.Y.Z` and its GitHub release (`.github/workflows/release-pr.yml`).
 
 ## Licence
 
