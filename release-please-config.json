@@ -12,6 +12,11 @@
         {
           "type": "generic",
           "path": "plugin.yaml"
+        },
+        {
+          "type": "json",
+          "path": "dashboard/manifest.json",
+          "jsonpath": "$.version"
         }
       ]
     }
