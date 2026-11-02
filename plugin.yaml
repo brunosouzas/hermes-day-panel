@@ -1,5 +1,5 @@
 name: day-panel
-version: 0.1.0
+version: 0.1.0 # x-release-please-version
 manifest_version: 2
 api_version: 1
 description: "A Today page in Hermes Desktop built from sources you list in a YAML file: any program that prints JSON, your open GitHub pull requests (merge after a preview and a confirmation, off by default), a read-only MCP tool, and your AI provider limit windows. Read-only, no model calls."

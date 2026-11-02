@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "b6e65e72d4272db5ac72da4e455e25b294aebbb4",
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "include-component-in-tag": false,
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "package-name": "hermes-day-panel",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "plugin.yaml"
+        }
+      ]
+    }
+  }
+}
